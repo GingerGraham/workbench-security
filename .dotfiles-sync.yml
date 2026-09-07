@@ -1,0 +1,33 @@
+# .dotfiles-sync.yml — workbench-security
+#
+# Ecosystem module (workbench-core ARCHITECTURE.md §2/§3): security
+# scanners, signing tooling, password manager CLIs/apps, and LUKS2+TPM2
+# disk encryption management. Meaningless standalone — depends on
+# workbench-core's loader and Core API.
+#
+# No deploy: entries — the Python PTY-capture worker (workers/) is read
+# directly out of this module's own fetched snapshot by
+# shell/disk-encryption.sh (path resolved via BASH_SOURCE), not deployed
+# anywhere else.
+#
+# See contracts/manifest-spec.md (in workbench-core) for the full field
+# reference.
+version: 1
+branch: main
+
+core_api: ">=1.1 <2.0"
+sync:
+  enabled: true
+
+register:
+  shell:
+    - src: shell/security.sh
+      tier: tools
+    - src: shell/disk-encryption.sh
+      tier: lazy
+  installers:
+    - src: shell/installers.sh
+  getters:
+    - name: security
+      function: get-security-functions
+      label: "Security scanners, signing, password managers, disk encryption"
