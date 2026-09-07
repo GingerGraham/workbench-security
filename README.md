@@ -27,10 +27,10 @@ wb add security
 ## Disk encryption internals
 
 `enroll-luks-tpm2`/`rotate-luks-key` generate recovery keys by running
-`systemd-cryptenroll --recovery-key` inside a real PTY (`workers/
-disk-encryption-pty-capture.py`, Python's stdlib `pty` module — `script(1)`
-isn't assumed present, since Fedora splits it out of the default
-`util-linux-core` install) so password-prompt echo suppression behaves
+`systemd-cryptenroll --recovery-key` inside a real PTY
+(`workers/disk-encryption-pty-capture.py`, Python's stdlib `pty` module —
+`script(1)` isn't assumed present, since Fedora splits it out of the
+default `util-linux-core` install) so password-prompt echo suppression behaves
 exactly as if run directly, while transcribing the output to a root-owned,
 `O_EXCL`-created file that only root ever touches. See the comments in
 `shell/disk-encryption.sh` and the worker script for the full design

@@ -343,8 +343,8 @@ _tpm_ensure_recovery_key() {
     unset recovery_transcript
 }
 
-# Strips ANSI escape sequences and carriage returns from a script(1)
-# typescript so a captured transcript reads cleanly when stored as a note.
+# Strips ANSI escape sequences and carriage returns from a PTY-captured
+# transcript so it reads cleanly when stored as a note.
 _tpm_clean_transcript() {
     sed $'s/\x1b\[[0-9;]*[a-zA-Z]//g' | tr -d '\r'
 }
