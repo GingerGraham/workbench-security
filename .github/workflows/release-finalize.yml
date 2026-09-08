@@ -13,6 +13,6 @@ jobs:
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/v')
     # TODO: bump to @main once GingerGraham/workbench-core#33 (D40) merges.
-    uses: GingerGraham/workbench-core/.github/workflows/module-release-finalize.yml@d926f15a055dccb759cdda545c3c2fc75c097968
+    uses: GingerGraham/workbench-core/.github/workflows/module-release-finalize.yml@46920fc86bd3eb9519c60b710a8e84f45075cea5
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

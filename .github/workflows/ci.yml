@@ -15,7 +15,7 @@ jobs:
     # restore the input description above once
     # GingerGraham/workbench-core#33 (D40) merges. Pinned to that PR's
     # HEAD commit sha for reproducibility while it's still in flight.
-    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@d926f15a055dccb759cdda545c3c2fc75c097968
+    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@46920fc86bd3eb9519c60b710a8e84f45075cea5
     with:
       module_name: security
-      core_ref: ${{ github.event.inputs.core_ref || 'd926f15a055dccb759cdda545c3c2fc75c097968' }}
+      core_ref: ${{ github.event.inputs.core_ref || '46920fc86bd3eb9519c60b710a8e84f45075cea5' }}
