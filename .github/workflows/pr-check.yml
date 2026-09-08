@@ -7,8 +7,6 @@ on:
 jobs:
   commit-format:
     # TODO: bump to @main and drop core_ref once GingerGraham/workbench-core#33 (D40) merges.
-    # Pinned to that PR's branch HEAD sha (reusable-workflow `uses:` refs
-    # can't contain a "/", so the branch name itself can't be used here).
-    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@6a3e19d6b017986aae3fbbb87d1b94cae193de44
+    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@d926f15a055dccb759cdda545c3c2fc75c097968
     with:
-      core_ref: claude/workbench-extension-ci-ska0he
+      core_ref: d926f15a055dccb759cdda545c3c2fc75c097968
