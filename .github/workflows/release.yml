@@ -14,9 +14,13 @@ jobs:
     uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@main
     with:
       module_name: security
+      core_ref: main
 
   release:
     needs: ci
+    # core_ref: main -- see ci.yml's comment on why.
     uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@main
+    with:
+      core_ref: main
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
