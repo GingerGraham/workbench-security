@@ -7,12 +7,10 @@ on:
 
 jobs:
   finalize:
-    # Gated here too (module-release-finalize.yml also gates internally)
-    # so a run isn't scheduled at all for an unrelated closed PR.
+    # module-release-finalize.yml gates internally on merged + release/v*.
     if: |
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/v')
-    # TODO: bump to @main once GingerGraham/workbench-core#33 (D40) merges.
-    uses: GingerGraham/workbench-core/.github/workflows/module-release-finalize.yml@46920fc86bd3eb9519c60b710a8e84f45075cea5
+    uses: GingerGraham/workbench-core/.github/workflows/module-release-finalize.yml@main
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

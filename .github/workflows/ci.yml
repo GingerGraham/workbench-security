@@ -6,16 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       core_ref:
-        description: "workbench-core ref to test against (temporarily defaults to the in-flight core PR's pinned commit -- see TODO below; will default to core's latest published release once that PR merges)"
+        description: "workbench-core ref to test against (default: core's latest published release)"
         required: false
 
 jobs:
   module-ci:
-    # TODO: bump to @main, drop the core_ref default override below, and
-    # restore the input description above once
-    # GingerGraham/workbench-core#33 (D40) merges. Pinned to that PR's
-    # HEAD commit sha for reproducibility while it's still in flight.
-    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@46920fc86bd3eb9519c60b710a8e84f45075cea5
+    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@main
     with:
       module_name: security
-      core_ref: ${{ github.event.inputs.core_ref || '46920fc86bd3eb9519c60b710a8e84f45075cea5' }}
+      core_ref: ${{ github.event.inputs.core_ref }}
