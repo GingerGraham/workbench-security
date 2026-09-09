@@ -389,14 +389,14 @@ install-1password() {
     echo "  and enable 'Integrate with 1Password CLI'."
 }
 
-# Mirrors install-1password's own final check. Known gap: the flatpak
-# fallback path (used only for a genuinely unrecognised distro) installs
-# com.onepassword.OnePassword with no `1password` binary on PATH, so this
-# predicate under-reports in that one edge case — accepted, since it's
-# the same signal the installer itself already treats as authoritative
-# for every other path, and the alternative is no predicate at all.
+# Mirrors install-1password's own final check for every path except the
+# flatpak fallback (unrecognised distros only), where install-1password
+# itself installs com.onepassword.OnePassword with no `1password` binary
+# on PATH — checked here directly via `flatpak info` so that path is no
+# longer a known gap.
 installed-1password() {
-    command -v 1password &>/dev/null
+    command -v 1password &>/dev/null && return 0
+    command -v flatpak &>/dev/null && flatpak info com.onepassword.OnePassword &>/dev/null
 }
 
 # ── 1Password CLI (op) install ────────────────────────────────────────────────

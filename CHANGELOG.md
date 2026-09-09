@@ -8,7 +8,8 @@ All notable changes to `workbench-security` are documented here.
 
 - Added `installed-cosign`, `installed-trivy`, `installed-bw-cli`,
   `installed-1password`, `installed-op-cli` — reports install status to
-  `wb tools upgrade`/`list --status` (workbench-core §12 D43).
+  `wb tools upgrade`/`wb tools list --status` (workbench-core §12 D43).
+  `installed-1password` also checks the flatpak-fallback install path.
   `install-bitwarden` deliberately has no predicate — see
   shell/installers.sh comment for why.
 
