@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-09
+
 ### Added
 
 - Initial decomposition from `workbench-precursor` (Wave C): ClamAV/netcat
