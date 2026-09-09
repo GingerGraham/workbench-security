@@ -4,6 +4,14 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added `installed-cosign`, `installed-trivy`, `installed-bw-cli`,
+  `installed-1password`, `installed-op-cli` — reports install status to
+  `wb tools upgrade`/`list --status` (workbench-core §12 D43).
+  `install-bitwarden` deliberately has no predicate — see
+  shell/installers.sh comment for why.
+
 ## [0.1.0] - 2026-09-09
 
 ### Added
