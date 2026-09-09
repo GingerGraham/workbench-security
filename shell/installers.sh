@@ -45,6 +45,10 @@ install-cosign() {
     fi
 }
 
+installed-cosign() {
+    command -v cosign &>/dev/null
+}
+
 # ── Trivy install ─────────────────────────────────────────────────────────────
 _trivy-repo-rpm() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
@@ -116,6 +120,10 @@ install-trivy() {
     esac
 }
 
+installed-trivy() {
+    command -v trivy &>/dev/null
+}
+
 # ── Bitwarden install ─────────────────────────────────────────────────────────
 install-bitwarden() {
     log_info "Installing or updating Bitwarden..."
@@ -171,6 +179,18 @@ install-bitwarden() {
     rm -rf "${temp_dir}"
     log_info "Bitwarden installation complete"
 }
+
+# No installed-bitwarden predicate: the desktop app installs via five
+# divergent paths with no unifying signal — apt/dnf/zypper (.deb/.rpm,
+# binary plausibly `bitwarden`), pacman-via-yay (bitwarden-bin AUR
+# package), pacman-without-yay (an AppImage at
+# ~/Applications/Bitwarden.AppImage, never on PATH), a Homebrew CASK on
+# macOS (a .app bundle, not a PATH binary — `command -v` cannot see it),
+# and a Flatpak fallback (com.bitwarden.desktop, also never on PATH).
+# Unlike install-1password above, install-bitwarden never verifies its
+# own success either, so there's no existing check to mirror. Stays
+# unresponsive to `wb tools upgrade`; fully installable via `wb tools
+# install bitwarden`.
 
 # ── Bitwarden CLI (bw) install ────────────────────────────────────────────────
 # This is the headless CLI tool, separate from the Bitwarden desktop app.
@@ -239,6 +259,11 @@ install-bw-cli() {
         log_warn "bw not found in PATH after install. You may need to restart your shell."
         log_warn "Expected location: ${HOME}/.local/bin/bw"
     fi
+}
+
+# Mirrors install-bw-cli's own final check.
+installed-bw-cli() {
+    command -v bw &>/dev/null
 }
 
 # ── 1Password desktop app install ────────────────────────────────────────────
@@ -362,6 +387,16 @@ install-1password() {
     echo
     echo "  To enable CLI integration, open 1Password → Settings → Developer"
     echo "  and enable 'Integrate with 1Password CLI'."
+}
+
+# Mirrors install-1password's own final check for every path except the
+# flatpak fallback (unrecognised distros only), where install-1password
+# itself installs com.onepassword.OnePassword with no `1password` binary
+# on PATH — checked here directly via `flatpak info` so that path is no
+# longer a known gap.
+installed-1password() {
+    command -v 1password &>/dev/null && return 0
+    command -v flatpak &>/dev/null && flatpak info com.onepassword.OnePassword &>/dev/null
 }
 
 # ── 1Password CLI (op) install ────────────────────────────────────────────────
@@ -510,4 +545,9 @@ install-op-cli() {
     else
         log_warn "op not found in PATH after install. Restart your shell or check ~/.local/bin."
     fi
+}
+
+# Mirrors install-op-cli's own final check.
+installed-op-cli() {
+    command -v op &>/dev/null
 }
