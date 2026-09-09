@@ -1,0 +1,13 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  commit-format:
+    # core_ref: main -- see ci.yml's comment on why (this feature is under
+    # .github/, which never gets its own core release).
+    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@main
+    with:
+      core_ref: main

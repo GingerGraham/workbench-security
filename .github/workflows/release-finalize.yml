@@ -1,0 +1,16 @@
+name: Release Finalize
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  finalize:
+    # module-release-finalize.yml gates internally on merged + release/v*.
+    if: |
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    uses: GingerGraham/workbench-core/.github/workflows/module-release-finalize.yml@main
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

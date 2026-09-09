@@ -273,6 +273,7 @@ _1password-install-rhel() {
 
     ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
 
+    # shellcheck disable=SC2016
     ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
 
     if command -v dnf &>/dev/null; then
@@ -396,7 +397,8 @@ _op-install-rhel() {
     ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
 
     if [[ ! -f /etc/yum.repos.d/1password.repo ]]; then
-        ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
+        # shellcheck disable=SC2016
+    ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
     fi
 
     if command -v dnf &>/dev/null; then
