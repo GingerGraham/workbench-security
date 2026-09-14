@@ -25,7 +25,7 @@
       a release with an empty one.
 - [ ] `tests/check-*.sh` pass locally, if this module has any, and a
       new/updated suite exists if behaviour changed.
-- [ ] `shellcheck shell/**/*.sh` is clean.
+- [ ] `find shell -name '*.sh' -exec shellcheck {} +` is clean.
 - [ ] Everything under `shell/`, `tests/` stays Bash 3.2
       compatible — see [`CONTRIBUTING.md`](../CONTRIBUTING.md#bash-32-compatibility).
 - [ ] If this touches repo structure, the manifest schema, or the sync
