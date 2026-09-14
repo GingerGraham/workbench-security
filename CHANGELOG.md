@@ -11,6 +11,12 @@ All notable changes to `workbench-security` are documented here.
   `.claude/skills/conventional-commits/SKILL.md`) — ports
   `workbench-core`'s D32 agent-instruction topology to this repo. See
   `workbench-core`'s `docs/decisions-log.md` D58.
+- **Repo governance files** (`.github/PULL_REQUEST_TEMPLATE.md`,
+  `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml`,
+  `.github/CODEOWNERS`, `CONTRIBUTING.md`, `SECURITY.md`) — ports
+  `workbench-core`'s D31 governance-file topology to this repo,
+  piloted on `workbench-git` first. See `workbench-core`'s
+  `docs/decisions-log.md` D60.
 
 ## [0.2.0] - 2026-09-09
 

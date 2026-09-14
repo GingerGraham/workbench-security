@@ -1,0 +1,9 @@
+# Sole maintainer today — mirrors workbench-core's CODEOWNERS
+# (docs/decisions-log.md D31/D33). This file exists so review requests
+# are automatic and so a future collaborator's ownership boundaries are
+# explicit and file-path-based rather than assumed. No branch ruleset on
+# this repo requires Code Owner review yet, for the same reason core
+# doesn't (D33) — a single owner can't satisfy a required-reviewer rule
+# for their own PR.
+
+* @GingerGraham

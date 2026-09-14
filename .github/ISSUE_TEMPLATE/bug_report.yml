@@ -1,0 +1,63 @@
+name: Bug report
+description: Report unexpected behaviour in workbench-security
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. If this looks like an
+        install/sync issue rather than something specific to this module,
+        workbench-core's [troubleshooting guide](https://github.com/GingerGraham/workbench-core/blob/main/docs/troubleshooting.md)
+        is worth a quick check first.
+  - type: input
+    id: module-version
+    attributes:
+      label: workbench-security version
+      description: Output of `wb module info security`
+    validations:
+      required: true
+  - type: input
+    id: core-version
+    attributes:
+      label: workbench-core version
+      description: Output of `wb version`
+    validations:
+      required: false
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Fedora / RHEL-family Linux
+        - Other Linux
+        - macOS
+        - WSL2
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected to happen too, if it's not obvious.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Re-run with `WORKBENCH_DEBUG=true` if you can, and paste the relevant portion. This renders as a code block automatically.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked workbench-core's troubleshooting guide first, if this looked like an install/sync issue
+          required: false
