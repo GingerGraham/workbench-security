@@ -6,8 +6,8 @@ agent working in this repo — Claude Code reads it via `CLAUDE.md`'s
 repository-root `AGENTS.md`. Keep this file itself short; anything
 substantial belongs in the docs it points to.
 
-This is a `workbench` ecosystem module — meaningless standalone. It
-exists to be installed by `workbench-core`'s `wb add <module>`.
+This is a `workbench` ecosystem module — it's meaningless standalone.
+It exists to be installed by `workbench-core`'s `wb add <module>`.
 
 ## Read first
 
