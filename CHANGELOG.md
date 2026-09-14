@@ -4,6 +4,14 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Agent-instruction files** (`AGENTS.md`, `CLAUDE.md`,
+  `.github/copilot-instructions.md`,
+  `.claude/skills/conventional-commits/SKILL.md`) — ports
+  `workbench-core`'s D32 agent-instruction topology to this repo. See
+  `workbench-core`'s `docs/decisions-log.md` D58.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added
