@@ -22,8 +22,9 @@ It exists to be installed by `workbench-core`'s `wb add <module>`.
   documented.
 - [`workbench-core`'s `docs/module-authoring.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/module-authoring.md) —
   the manifest contract: what `register:`, `deploy:`, and `hooks:` in
-  this repo's manifest can and can't do, and what `module-ci.yml`'s
-  "add to core" check actually verifies.
+  this repo's manifest can and can't do, and what `workbench-core`'s
+  reusable `module-ci.yml` "add to core" check (called from this repo's
+  own `.github/workflows/ci.yml`) actually verifies.
 - [`README.md`](README.md) — what this module actually installs/gives
   you.
 - [`.claude/skills/conventional-commits/SKILL.md`](.claude/skills/conventional-commits/SKILL.md) —

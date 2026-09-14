@@ -33,8 +33,10 @@ PR *title*, not any individual commit's message — so the title needs
 `type[(scope)][!]: subject` grammar too. A perfectly-formatted commit
 inside a badly-titled PR still lands on `main` unparseable, and that
 merge's severity is silently dropped — no version bump, no release, for
-a real change. `pr-check.yml`'s "PR title format" job catches this
-before merge; don't rely on it as the first time you check the title.
+a real change. This repo's own `.github/workflows/pr-check.yml`
+(`commit-format` job, calling `workbench-core`'s reusable
+`module-pr-check.yml`) catches this before merge; don't rely on it
+as the first time you check the title.
 
 ## Before opening the PR
 
