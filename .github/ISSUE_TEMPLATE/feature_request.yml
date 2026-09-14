@@ -23,7 +23,6 @@ body:
       options:
         - Aliases / shell functions
         - Installer (install-<tool> functions)
-        - Hooks (hooks.post_deploy)
         - Manifest (register/deploy entries)
         - Docs (README)
         - CI / release automation
