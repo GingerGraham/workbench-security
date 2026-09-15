@@ -18,6 +18,15 @@ All notable changes to `workbench-security` are documented here.
   piloted on `workbench-git` first. See `workbench-core`'s
   `docs/decisions-log.md` D60.
 
+### Fixed
+
+- Suppressed a `gitleaks` false positive on `install-1password`'s
+  documentation comment: the entropy-based `generic-api-key` rule flagged
+  1Password's own published GPG signing-key fingerprint as a possible
+  secret. It's meant to be public — that's how fingerprint verification
+  works — so marked with an inline `gitleaks:allow` rather than treated
+  as a real credential.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added
