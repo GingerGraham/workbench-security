@@ -268,7 +268,7 @@ installed-bw-cli() {
 
 # ── 1Password desktop app install ────────────────────────────────────────────
 # Official vendor repos per distro — package manager handles updates.
-# GPG key: 3FEF9748469ADBE15DA7CA80AC2D62742012EA22
+# GPG key: 3FEF9748469ADBE15DA7CA80AC2D62742012EA22  # gitleaks:allow -- 1Password's published signing-key fingerprint, public by design
 
 _1password-install-debian() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
