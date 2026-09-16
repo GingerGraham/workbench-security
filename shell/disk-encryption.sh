@@ -20,6 +20,38 @@
 # freshly provisioned device this typically still lands close to: slot 0 =
 # install-time passphrase, slot 1 = recovery key, slot 2 = TPM2 — but that's
 # an observed outcome of call order, not something enforced.
+_tpm_required_tools=(cryptsetup blkid systemd-cryptenroll systemctl python3)
+
+# Quiet twin — reused by both _tpm_require_tools' loud preflight (below the
+# Linux guard) and both gated functions' silent predicates
+# (_wb_alias_availability right below). None of these tools exist on
+# macOS anyway, so this correctly reports "not present" there regardless;
+# what matters is that this function and the _wb_alias_availability call
+# below are declared *before* the guard, not after. On a non-Linux host,
+# that guard returns out of this file immediately, so anything placed
+# after it (these included) would never run — and
+# _wb_function_available's documented fallback for "no predicate
+# declared" is available, which would silently defeat this on exactly
+# the host (non-Linux) where it most needs to fire.
+_tpm_tools_present() {
+    local cmd
+    for cmd in "${_tpm_required_tools[@]}"; do
+        command -v "${cmd}" &>/dev/null || return 1
+    done
+}
+
+# Availability predicates for `wb functions`/module getters — these two
+# functions require the tools above; hide them from listings otherwise.
+# See workbench-core's module-authoring.md "Declaring function
+# availability" once that lands. Deliberately NOT gated here:
+#   - _tpm_check_tpm2_device: hardware enumeration (shells out to
+#     `systemd-cryptenroll --tpm2-device=list`), not a cheap/
+#     side-effect-free check — stays in the runtime preflight only.
+#   - _tpm_offer_secret_storage (Bitwarden/1Password): an optional
+#     enhancement inside a function that already works fully without
+#     it, not a gate on the function itself.
+_wb_alias_availability _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
+
 [[ "${WORKBENCH_OS}" == "Linux" ]] || return 0
 
 # ── LUKS + TPM2 enrollment ─────────────────────────────────────────────────────
@@ -133,17 +165,8 @@ rotate-luks-key() {
 }
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
-
-_tpm_required_tools=(cryptsetup blkid systemd-cryptenroll systemctl python3)
-
-# Quiet twin — reused by both _tpm_require_tools' loud preflight and
-# both gated functions' silent predicates (_wb_alias_availability below).
-_tpm_tools_present() {
-    local cmd
-    for cmd in "${_tpm_required_tools[@]}"; do
-        command -v "${cmd}" &>/dev/null || return 1
-    done
-}
+# _tpm_required_tools/_tpm_tools_present are declared above the Linux guard
+# at the top of this file — see the comment there for why.
 
 _tpm_require_tools() {
     _tpm_tools_present && return 0
@@ -156,18 +179,6 @@ _tpm_require_tools() {
         fi
     done
 }
-
-# Availability predicates for `wb functions`/module getters — these two
-# functions require the tools above; hide them from listings otherwise.
-# See workbench-core's module-authoring.md "Declaring function
-# availability" once that lands. Deliberately NOT gated here:
-#   - _tpm_check_tpm2_device: hardware enumeration (shells out to
-#     `systemd-cryptenroll --tpm2-device=list`), not a cheap/
-#     side-effect-free check — stays in the runtime preflight only.
-#   - _tpm_offer_secret_storage (Bitwarden/1Password): an optional
-#     enhancement inside a function that already works fully without
-#     it, not a gate on the function itself.
-_wb_alias_availability _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
 
 # Uses systemd-cryptenroll's own device enumeration rather than a separate
 # tpm2-tools dependency — it's the same backend that will do the enrolling.
