@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-16
+
 ### Fixed
 
 - `enroll-luks-tpm2` and `rotate-luks-key` no longer show up in
