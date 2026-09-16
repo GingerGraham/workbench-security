@@ -4,6 +4,17 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `enroll-luks-tpm2` and `rotate-luks-key` no longer show up in
+  `wb functions`/module-getter listings on a host missing one of their
+  required tools (`cryptsetup`, `blkid`, `systemd-cryptenroll`,
+  `systemctl`, `python3`). Both now declare an availability predicate
+  via `workbench-core`'s `_wb_alias_availability`, backed by a new
+  quiet `_tpm_tools_present` twin of the existing `_tpm_require_tools`
+  preflight check — no behavior change to either function's runtime
+  preflight, which still logs which specific tool is missing.
+
 ## [0.2.1] - 2026-09-15
 
 ### Added
