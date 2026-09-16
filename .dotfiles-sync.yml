@@ -15,7 +15,7 @@
 version: 1
 branch: main
 
-core_api: ">=1.1 <2.0"
+core_api: ">=1.2 <2.0"
 sync:
   enabled: true
 
