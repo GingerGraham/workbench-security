@@ -1,4 +1,4 @@
-# .dotfiles-sync.yml — workbench-security
+# workbench.yml — workbench-security
 #
 # Ecosystem module (workbench-core ARCHITECTURE.md §2/§3): security
 # scanners, signing tooling, password manager CLIs/apps, and LUKS2+TPM2
@@ -12,12 +12,15 @@
 #
 # See contracts/manifest-spec.md (in workbench-core) for the full field
 # reference.
-version: 1
+version: 2
 branch: main
 
 core_api: ">=1.2 <2.0"
 sync:
   enabled: true
+
+info:
+  description: "Security scanners, signing tooling, password manager CLIs/apps, and LUKS2+TPM2 disk encryption management"
 
 register:
   shell:
