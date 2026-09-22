@@ -39,7 +39,7 @@ jobs:
         id: decide
         env:
           EVENT_NAME: ${{ github.event_name }}
-          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
         run: |
           if [[ "${EVENT_NAME}" == "push" && "${HEAD_COMMIT_MESSAGE}" == chore\(release\):* ]]; then
             echo "proceed=false" >> "$GITHUB_OUTPUT"
@@ -63,7 +63,7 @@ jobs:
     uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@main
     with:
       core_ref: main
-      bump_type: ${{ github.event.inputs.bump_type }}
-      reason: ${{ github.event.inputs.reason }}
+      bump_type: ${{ github.event.inputs.bump_type || '' }}
+      reason: ${{ github.event.inputs.reason || '' }}
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
