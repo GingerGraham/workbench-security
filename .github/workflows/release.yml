@@ -3,24 +3,67 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Force a release at this minimum semver severity, regardless of what Conventional Commits since the last tag would compute. Never downgrades a higher severity already implied by pending commits — only raises the floor. See workbench-core's docs/decisions-log.md D67."
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      reason:
+        description: "Optional note for why this release is being forced manually (included in the release PR notes only)."
+        required: false
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  guard:
+    name: guard release trigger
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+    steps:
+      - name: Refuse manual dispatch from a non-main ref
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Manual release dispatch must be run from main (got ${{ github.ref }}). Set 'Use workflow from' to main when dispatching."
+          exit 1
+
+      - name: Decide whether this run should proceed
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+        run: |
+          if [[ "${EVENT_NAME}" == "push" && "${HEAD_COMMIT_MESSAGE}" == chore\(release\):* ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   ci:
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    name: ci
+    needs: guard
+    if: needs.guard.outputs.proceed == 'true'
     uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@main
     with:
       module_name: security
       core_ref: main
 
   release:
-    needs: ci
+    needs: [guard, ci]
+    if: needs.guard.outputs.proceed == 'true' && needs.ci.result == 'success'
     # core_ref: main -- see ci.yml's comment on why.
     uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@main
     with:
       core_ref: main
+      bump_type: ${{ github.event.inputs.bump_type || '' }}
+      reason: ${{ github.event.inputs.reason || '' }}
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
