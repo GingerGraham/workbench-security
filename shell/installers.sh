@@ -317,7 +317,10 @@ _1password-install-suse() {
     else
         log_info "1Password zypper repo already present"
     fi
-    ${elevation_cmd} zypper --gpg-auto-import-keys refresh
+    # Scoped to the 1password repo alone — a bare `refresh` auto-imports
+    # signing keys for every configured repo, not only the one just added
+    # (security review M4).
+    ${elevation_cmd} zypper --gpg-auto-import-keys refresh 1password  # pattern-scan:ignore -- scoped to a single named repo, not a bare refresh (see comment above)
     ${elevation_cmd} zypper install -y 1password
 }
 
@@ -450,7 +453,10 @@ _op-install-suse() {
     if ! zypper lr 2>/dev/null | grep -qi '1password'; then
         ${elevation_cmd} zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password
     fi
-    ${elevation_cmd} zypper --gpg-auto-import-keys refresh
+    # Scoped to the 1password repo alone — a bare `refresh` auto-imports
+    # signing keys for every configured repo, not only the one just added
+    # (security review M4).
+    ${elevation_cmd} zypper --gpg-auto-import-keys refresh 1password  # pattern-scan:ignore -- scoped to a single named repo, not a bare refresh (see comment above)
     ${elevation_cmd} zypper install -y 1password-cli
 }
 
