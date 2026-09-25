@@ -4,6 +4,15 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **1Password's zypper repo key refresh is now scoped to that one repo,
+  not every configured repo on the host.** `zypper --gpg-auto-import-keys
+  refresh` with no repo argument auto-accepts new signing keys for every
+  repo configured on the system, not only the one just added (security
+  review M4). Both `_1password-install-suse` and `_op-install-suse` now
+  pass the `1password` repo alias explicitly.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
