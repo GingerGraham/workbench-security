@@ -4,6 +4,13 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`enroll-luks-tpm2 --with-pin`** enrolls TPM2 unlock that also requires a
+  PIN at every boot, and plain `enroll-luks-tpm2` now says that TPM2-only
+  unlock leaves a stolen, powered-off laptop booting to an unlocked disk.
+  README documents the threat model (security review L8).
+
 ## [0.3.1] - 2026-09-25
 
 ### Security
