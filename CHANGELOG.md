@@ -4,6 +4,19 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **LUKS recovery keys and the SonarQube token no longer appear in
+  process argv or on disk in the clear.** The Bitwarden path pipes the item
+  through `bw encode | bw create item` on stdin instead of passing the
+  recovery key to `python3` and `bw` as arguments and writing it to a
+  `mktemp` file; the 1Password path builds the item from `op item template
+  get` and passes it with `--template` from a private 0700 directory under
+  `$XDG_RUNTIME_DIR` (or `/dev/shm`) that is removed afterwards, instead of
+  `notesPlain=<key>` in argv; `sq` passes the token as `SONAR_TOKEN` in the
+  scanner's environment instead of `-Dsonar.token=<token>` (security
+  review M5, M6).
+
 ## [0.3.1] - 2026-09-25
 
 ### Security

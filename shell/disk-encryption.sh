@@ -427,39 +427,37 @@ _tpm_bw_status() {
     bw status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null
 }
 
+# _tpm_secret_tmpdir
+# Fresh 0700 directory for transient secret material. Prefers
+# $XDG_RUNTIME_DIR (per-user tmpfs, removed at logout), then /dev/shm, then
+# $TMPDIR. Sweeps this user's leftovers older than 60 minutes first (security
+# review M6).
+_tpm_secret_tmpdir() {
+    local base=""
+    if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "${XDG_RUNTIME_DIR}" && -w "${XDG_RUNTIME_DIR}" ]]; then
+        base="${XDG_RUNTIME_DIR}"
+    elif [[ -d /dev/shm && -w /dev/shm ]]; then
+        base="/dev/shm"
+    else
+        base="${TMPDIR:-/tmp}"
+    fi
+    find "${base}" -maxdepth 1 -type d -name 'wb-tpm.*' -user "$(id -u)" -mmin +60 -exec rm -rf {} + 2>/dev/null
+    ( umask 077; mktemp -d "${base%/}/wb-tpm.XXXXXX" )
+}
+
 _tpm_bw_store_recovery() {
-    local title="$1" body="$2" encoded tmp_json
-
-    tmp_json="$(mktemp)" || {
-        log_error "disk-encryption: failed to create temp file for Bitwarden item"
-        return 1
-    }
-
-    bw get template item 2>/dev/null | python3 -c '
+    local title="$1" body="$2"
+    # The recovery key reaches python on stdin via printf (a builtin), and the
+    # encoded item reaches bw on stdin — never argv, never a file (security
+    # review M5).
+    if printf '%s' "${body}" | python3 -c '
 import json, sys
-tpl = json.load(sys.stdin)
-tpl["type"] = 2
-tpl["name"] = sys.argv[1]
-tpl["secureNote"] = {"type": 0}
-tpl["notes"] = sys.argv[2]
-print(json.dumps(tpl))
-' "${title}" "${body}" > "${tmp_json}"
-
-    if [[ ! -s "${tmp_json}" ]]; then
-        log_error "disk-encryption: failed to build Bitwarden item"
-        rm -f "${tmp_json}"
-        return 1
-    fi
-
-    encoded="$(bw encode < "${tmp_json}")"
-    rm -f "${tmp_json}"
-
-    if [[ -z "${encoded}" ]]; then
-        log_error "disk-encryption: bw encode returned empty output"
-        return 1
-    fi
-
-    if bw create item "${encoded}" >/dev/null 2>&1; then
+print(json.dumps({
+    "organizationId": None, "folderId": None, "type": 2,
+    "name": sys.argv[1], "notes": sys.stdin.read(), "favorite": False,
+    "secureNote": {"type": 0}, "fields": []
+}))
+' "${title}" | bw encode | bw create item >/dev/null 2>&1; then
         log_info "disk-encryption: recovery key stored in Bitwarden as '${title}'"
     else
         log_error "disk-encryption: failed to create Bitwarden item '${title}'"
@@ -468,8 +466,29 @@ print(json.dumps(tpl))
 }
 
 _tpm_op_store_recovery() {
-    local title="$1" body="$2"
-    if op item create --category "Secure Note" --title "${title}" "notesPlain=${body}" >/dev/null 2>&1; then
+    local title="$1" body="$2" tmp_dir template rc
+    # Item passed via --template (a file in a private runtime directory), not
+    # as "notesPlain=<recovery key>" in argv (security review M5).
+    tmp_dir="$(_tpm_secret_tmpdir)" || { log_error "disk-encryption: could not create a private temp directory"; return 1; }
+    template="$(op item template get "Secure Note" 2>/dev/null)" || { rm -rf "${tmp_dir}"; log_error "disk-encryption: op item template get failed"; return 1; }
+    if ! printf '%s' "${body}" | python3 -c '
+import json, sys
+tpl = json.loads(sys.argv[1])
+tpl["title"] = sys.argv[2]
+for field in tpl.get("fields", []):
+    if field.get("id") == "notesPlain":
+        field["value"] = sys.stdin.read()
+with open(sys.argv[3], "w") as out:
+    json.dump(tpl, out)
+' "${template}" "${title}" "${tmp_dir}/item.json"; then
+        rm -rf "${tmp_dir}"
+        log_error "disk-encryption: failed to build 1Password item '${title}'"
+        return 1
+    fi
+    op item create --template "${tmp_dir}/item.json" >/dev/null 2>&1
+    rc=$?
+    rm -rf "${tmp_dir}"
+    if [[ ${rc} -eq 0 ]]; then
         log_info "disk-encryption: recovery key stored in 1Password as '${title}'"
     else
         log_error "disk-encryption: failed to create 1Password item '${title}'"

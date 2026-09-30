@@ -23,9 +23,12 @@ fi
 # evaluates the command substitution once, when the file is sourced, and
 # bakes that token into the alias for the rest of the shell session, even if
 # the secret rotates. A function re-reads it on every invocation instead.
+# The token goes in SONAR_TOKEN in the scanner's environment, not
+# -Dsonar.token=<token> in its argv (security review M5).
 if command -v sonar-scanner &>/dev/null; then
+    # SonarScanner reads SONAR_TOKEN natively.
     sq() {
-        sonar-scanner -Dsonar.token="$(secret-tool lookup service sonarqube account scanner 2>/dev/null)" -X "$@"
+        SONAR_TOKEN="$(secret-tool lookup service sonarqube account scanner 2>/dev/null)" sonar-scanner -X "$@"
     }
 fi
 
