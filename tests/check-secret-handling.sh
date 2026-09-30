@@ -70,7 +70,7 @@ if [[ "\$1 \$2" == "item create" ]]; then
     while [[ \$# -gt 0 ]]; do
         if [[ "\$1" == "--template" ]]; then
             cp "\$2" "${LOG}/op-template"
-            stat -c '%a' "\$(dirname "\$2")" > "${LOG}/op-dir-mode"
+            ls -ld "\$(dirname "\$2")" | cut -c1-10 > "${LOG}/op-dir-mode"
             dirname "\$2" > "${LOG}/op-dir"
         fi
         shift
@@ -91,9 +91,13 @@ chmod +x "${STUBS}"/*
 
 # ── Source the module files with core stubs ──────────────────────────────────
 
+# shellcheck disable=SC2329  # stubs are called by the sourced module files
 log_info()  { :; }
+# shellcheck disable=SC2329
 log_error() { :; }
+# shellcheck disable=SC2329
 log_warn()  { :; }
+# shellcheck disable=SC2329
 _wb_alias_availability() { :; }
 export WORKBENCH_OS="Linux"
 export XDG_RUNTIME_DIR="${WORK}/run"
@@ -138,10 +142,11 @@ if grep -q "${SECRET}" "${LOG}/op-template" 2>/dev/null && grep -q 'wb-test-titl
 else
     fail "op --template file is missing the key or title"
 fi
-if [[ "$(cat "${LOG}/op-dir-mode" 2>/dev/null)" == "700" ]]; then
+# ls -ld rather than stat: stat's format flags differ between GNU and BSD.
+if [[ "$(cat "${LOG}/op-dir-mode" 2>/dev/null)" == "drwx------" ]]; then
     ok "template directory was mode 0700"
 else
-    fail "template directory mode was '$(cat "${LOG}/op-dir-mode" 2>/dev/null)', expected 700"
+    fail "template directory mode was '$(cat "${LOG}/op-dir-mode" 2>/dev/null)', expected drwx------"
 fi
 case "$(cat "${LOG}/op-dir" 2>/dev/null)" in
     "${XDG_RUNTIME_DIR}"/wb-tpm.*) ok "template directory was under \$XDG_RUNTIME_DIR" ;;
