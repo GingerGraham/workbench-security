@@ -4,10 +4,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   commit-format:
-    # core_ref: main -- see ci.yml's comment on why (this feature is under
-    # .github/, which never gets its own core release).
-    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@main
-    with:
-      core_ref: main
+    # Pinned to a core release tag (workbench-core D78); core_ref defaults to
+    # core's latest release.
+    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@v2.16.0
