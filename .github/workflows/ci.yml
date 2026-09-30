@@ -6,17 +6,18 @@ on:
   workflow_dispatch:
     inputs:
       core_ref:
-        description: "workbench-core ref to test against (default: main)"
+        description: "workbench-core ref to test against (default: core's latest release)"
         required: false
+
+permissions:
+  contents: read
 
 jobs:
   module-ci:
-    # core_ref defaults to main, not module-ci.yml's own "latest published
-    # release" default: this feature lives entirely under .github/, which
-    # core's own release automation never version-bumps for (it only bumps
-    # on changes to registered bin/lib/bootstrap.sh files) -- so a core
-    # release containing this workflow will never exist to default to.
-    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@main
+    # Pinned to a core release tag (workbench-core D78); Dependabot bumps it.
+    # core_ref empty = core's latest release. Pass a ref via
+    # workflow_dispatch to test against an in-flight core change.
+    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@v2.16.0
     with:
       module_name: security
-      core_ref: ${{ github.event.inputs.core_ref || 'main' }}
+      core_ref: ${{ github.event.inputs.core_ref || '' }}

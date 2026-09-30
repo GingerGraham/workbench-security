@@ -22,6 +22,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   guard:
     name: guard release trigger
@@ -51,18 +54,15 @@ jobs:
     name: ci
     needs: guard
     if: needs.guard.outputs.proceed == 'true'
-    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@main
+    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@v2.16.0
     with:
       module_name: security
-      core_ref: main
 
   release:
     needs: [guard, ci]
     if: needs.guard.outputs.proceed == 'true' && needs.ci.result == 'success'
-    # core_ref: main -- see ci.yml's comment on why.
-    uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@main
+    uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@v2.16.0
     with:
-      core_ref: main
       bump_type: ${{ github.event.inputs.bump_type || '' }}
       reason: ${{ github.event.inputs.reason || '' }}
     secrets:
