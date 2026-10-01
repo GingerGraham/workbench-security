@@ -10,6 +10,29 @@
 # _npm_global_install come from workbench-core's Core API
 # (lib/core/installers-common.sh) — not duplicated here.
 
+# 1Password Linux packaging key — PENDING confirmation by Graham against
+# 1Password's official Linux installation documentation (source URL and date
+# to be recorded here once confirmed). The same value is already relied on by
+# _1password-install-arch. Public OpenPGP fingerprint, not a secret.
+_1PASSWORD_KEY_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22" # gitleaks:allow
+_1PASSWORD_KEY_URL="https://downloads.1password.com/linux/keys/1password.asc"
+
+# _1password_repo_rhel
+# Pinned local key and package allowlist (workbench-core D79). Rewritten on
+# every run so existing hosts converge.
+_1password_repo_rhel() {
+    # shellcheck disable=SC2016  # $basearch is for dnf, not the shell
+    _wb_dnf_vendor_repo \
+        --id 1password \
+        --name "1Password Stable Channel" \
+        --baseurl 'https://downloads.1password.com/linux/rpm/stable/$basearch' \
+        --key-url "${_1PASSWORD_KEY_URL}" \
+        --fingerprint "${_1PASSWORD_KEY_FPR}" \
+        --include 1password \
+        --include 1password-cli \
+        --repo-gpgcheck
+}
+
 # ── cosign install (Sigstore signing) ────────────────────────────────────────
 # Needed for full signature verification of tenv and of the tofu/terraform
 # binaries tenv downloads (workbench-iac). Bootstrapped from the official
@@ -268,7 +291,7 @@ installed-bw-cli() {
 
 # ── 1Password desktop app install ────────────────────────────────────────────
 # Official vendor repos per distro — package manager handles updates.
-# GPG key: 3FEF9748469ADBE15DA7CA80AC2D62742012EA22  # gitleaks:allow -- 1Password's published signing-key fingerprint, public by design
+# GPG key: see _1PASSWORD_KEY_FPR at the top of this file.
 
 _1password-install-debian() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
@@ -296,10 +319,7 @@ _1password-install-debian() {
 _1password-install-rhel() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
-
-    # shellcheck disable=SC2016
-    ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
+    _1password_repo_rhel || return 1
 
     if command -v dnf &>/dev/null; then
         ${elevation_cmd} dnf install -y 1password
@@ -311,27 +331,27 @@ _1password-install-rhel() {
 _1password-install-suse() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
+    _wb_rpm_import_pinned_key "${_1PASSWORD_KEY_URL}" 1password "${_1PASSWORD_KEY_FPR}" >/dev/null || return 1
     if ! zypper lr 2>/dev/null | grep -qi '1password'; then
         ${elevation_cmd} zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password
     else
         log_info "1Password zypper repo already present"
     fi
-    # Scoped to the 1password repo alone — a bare `refresh` auto-imports
-    # signing keys for every configured repo, not only the one just added
-    # (security review M4).
-    ${elevation_cmd} zypper --gpg-auto-import-keys refresh 1password  # pattern-scan:ignore -- scoped to a single named repo, not a bare refresh (see comment above)
+    # The pinned key is already imported above; --non-interactive rejects any
+    # other key the repo presents rather than auto-trusting it (D79 —
+    # review follow-up R2).
+    ${elevation_cmd} zypper --non-interactive refresh 1password
     ${elevation_cmd} zypper install -y 1password
 }
 
 _1password-install-arch() {
     # AUR package maintained by community
     if command -v yay &>/dev/null; then
-        gpg --receive-keys 3FEF9748469ADBE15DA7CA80AC2D62742012EA22 2>/dev/null || true
+        gpg --receive-keys "${_1PASSWORD_KEY_FPR}" 2>/dev/null || true
         yay -S --noconfirm 1password
     else
         log_info "yay not found — cloning 1password AUR package manually..."
-        gpg --receive-keys 3FEF9748469ADBE15DA7CA80AC2D62742012EA22 2>/dev/null || true
+        gpg --receive-keys "${_1PASSWORD_KEY_FPR}" 2>/dev/null || true
         local tmp_dir; tmp_dir="$(mktemp -d)"
         git clone https://aur.archlinux.org/1password.git "${tmp_dir}/1password" \
             || { log_error "Failed to clone AUR package"; rm -rf "${tmp_dir}"; return 1; }
@@ -431,13 +451,7 @@ _op-install-debian() {
 _op-install-rhel() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    # Repo may already exist from install-1password; rpm --import is idempotent
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
-
-    if [[ ! -f /etc/yum.repos.d/1password.repo ]]; then
-        # shellcheck disable=SC2016
-    ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
-    fi
+    _1password_repo_rhel || return 1
 
     if command -v dnf &>/dev/null; then
         ${elevation_cmd} dnf install -y 1password-cli
@@ -449,14 +463,14 @@ _op-install-rhel() {
 _op-install-suse() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
+    _wb_rpm_import_pinned_key "${_1PASSWORD_KEY_URL}" 1password "${_1PASSWORD_KEY_FPR}" >/dev/null || return 1
     if ! zypper lr 2>/dev/null | grep -qi '1password'; then
         ${elevation_cmd} zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password
     fi
-    # Scoped to the 1password repo alone — a bare `refresh` auto-imports
-    # signing keys for every configured repo, not only the one just added
-    # (security review M4).
-    ${elevation_cmd} zypper --gpg-auto-import-keys refresh 1password  # pattern-scan:ignore -- scoped to a single named repo, not a bare refresh (see comment above)
+    # The pinned key is already imported above; --non-interactive rejects any
+    # other key the repo presents rather than auto-trusting it (D79 —
+    # review follow-up R2).
+    ${elevation_cmd} zypper --non-interactive refresh 1password
     ${elevation_cmd} zypper install -y 1password-cli
 }
 

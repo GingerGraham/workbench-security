@@ -4,6 +4,21 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **1Password's repository key is now pinned and local.** On RHEL-family
+  hosts, `install-1password` and `install-op-cli` write one shared repo
+  definition through core's `_wb_dnf_vendor_repo`: the key is a pinned local
+  copy (`gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-workbench-1password`),
+  `includepkgs=1password 1password-cli` restricts what the repo can supply,
+  and `repo_gpgcheck=1` is kept; it is rewritten on every run so existing
+  hosts converge. On SUSE the key is imported only if it matches the pinned
+  fingerprint, and `zypper --gpg-auto-import-keys refresh` is replaced by
+  `zypper --non-interactive refresh`, which rejects any other key the repo
+  presents. A vendor key rotation now fails the install until this module
+  releases an updated pin (workbench-core D79; security review M4, R1, R2).
+  Requires Core API 1.5 (`core_api` floor raised to `>=1.5 <2.0`).
+
 ## [0.3.1] - 2026-09-25
 
 ### Security
