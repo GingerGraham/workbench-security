@@ -4,6 +4,16 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **The Trivy RPM repository is now limited to the `trivy` package and
+  rewritten on every run.** `/etc/yum.repos.d/trivy.repo` gains
+  `includepkgs=trivy`, and `_trivy-repo-rpm` no longer returns early when the
+  file already exists, so existing hosts converge. The Trivy release lookup
+  uses `curl -fsS` and reports a clear error on an HTTP failure. The repo key
+  itself is not yet pinned: Aqua publishes no fingerprint for it (security
+  review R1, M3).
+
 ## [0.3.1] - 2026-09-25
 
 ### Security

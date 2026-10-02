@@ -52,7 +52,10 @@ installed-cosign() {
 # ── Trivy install ─────────────────────────────────────────────────────────────
 _trivy-repo-rpm() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
-    [[ -f /etc/yum.repos.d/trivy.repo ]] && { log_info "Trivy repo already configured"; return 0; }
+    # Rewritten on every run (no early return) so existing hosts converge on the
+    # includepkgs allowlist (workbench-core D79). Aqua publishes no fingerprint
+    # for this key, so it is not pinned: gpgkey= stays remote until Graham
+    # decides whether to pin the current fingerprint on his own verification.
     cat <<'EOF' | ${elevation_cmd} tee /etc/yum.repos.d/trivy.repo
 [trivy]
 name=Trivy
@@ -60,12 +63,20 @@ baseurl=https://aquasecurity.github.io/trivy-repo/rpm/releases/$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=https://aquasecurity.github.io/trivy-repo/rpm/public.key
+includepkgs=trivy
 EOF
+    # check-update exits 100 when updates are available, which is success here;
+    # only other non-zero codes are real errors. Without this, `_trivy-repo-rpm
+    # && dnf install` would silently skip the install whenever an update exists.
+    local rc=0
     if command -v dnf &>/dev/null; then
-        ${elevation_cmd} dnf check-update --refresh -y
+        ${elevation_cmd} dnf check-update --refresh -y || rc=$?
     else
-        ${elevation_cmd} yum check-update -y
+        ${elevation_cmd} yum check-update -y || rc=$?
     fi
+    [[ ${rc} -eq 0 || ${rc} -eq 100 ]] && return 0
+    log_error "trivy: package metadata refresh failed (exit ${rc})"
+    return "${rc}"
 }
 
 _trivy-repo-deb() {
@@ -82,7 +93,10 @@ _trivy-repo-deb() {
 _trivy-install-linux() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
     local ver
-    ver="$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest \
+    local api_response
+    api_response="$(curl -fsS https://api.github.com/repos/aquasecurity/trivy/releases/latest)" \
+        || { log_error "Could not query the latest Trivy release (network or GitHub API rate limit)"; return 1; }
+    ver="$(printf '%s' "${api_response}" \
         | grep '"tag_name":' | sed -E 's/.+"v([^"]+)".+/\1/')"
     [[ -z "${ver}" ]] && { log_error "Could not determine Trivy version"; return 1; }
 
