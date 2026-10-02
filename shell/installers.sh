@@ -10,10 +10,13 @@
 # _npm_global_install come from workbench-core's Core API
 # (lib/core/installers-common.sh) — not duplicated here.
 
-# 1Password Linux packaging key — PENDING confirmation by Graham against
-# 1Password's official Linux installation documentation (source URL and date
-# to be recorded here once confirmed). The same value is already relied on by
-# _1password-install-arch. Public OpenPGP fingerprint, not a secret.
+# 1Password Linux packaging key (rsa4096, created 2017-05-18, expires
+# 2032-05-16; uid "Code signing for 1Password <codesign@1password.com>").
+# Confirmed by Graham on 2026-10-02 by running `gpg --show-keys
+# --with-fingerprint` on the key served from _1PASSWORD_KEY_URL below. Not
+# checked against 1Password's documentation page. The same value is also
+# relied on by _1password-install-arch. Public OpenPGP fingerprint, not a
+# secret.
 _1PASSWORD_KEY_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22" # gitleaks:allow
 _1PASSWORD_KEY_URL="https://downloads.1password.com/linux/keys/1password.asc"
 
