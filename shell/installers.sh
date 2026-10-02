@@ -65,11 +65,18 @@ enabled=1
 gpgkey=https://aquasecurity.github.io/trivy-repo/rpm/public.key
 includepkgs=trivy
 EOF
+    # check-update exits 100 when updates are available, which is success here;
+    # only other non-zero codes are real errors. Without this, `_trivy-repo-rpm
+    # && dnf install` would silently skip the install whenever an update exists.
+    local rc=0
     if command -v dnf &>/dev/null; then
-        ${elevation_cmd} dnf check-update --refresh -y
+        ${elevation_cmd} dnf check-update --refresh -y || rc=$?
     else
-        ${elevation_cmd} yum check-update -y
+        ${elevation_cmd} yum check-update -y || rc=$?
     fi
+    [[ ${rc} -eq 0 || ${rc} -eq 100 ]] && return 0
+    log_error "trivy: package metadata refresh failed (exit ${rc})"
+    return "${rc}"
 }
 
 _trivy-repo-deb() {
