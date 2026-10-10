@@ -17,7 +17,7 @@ jobs:
     # Pinned to a core release tag (workbench-core D78); Dependabot bumps it.
     # core_ref empty = core's latest release. Pass a ref via
     # workflow_dispatch to test against an in-flight core change.
-    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@v2.16.0
+    uses: GingerGraham/workbench-core/.github/workflows/module-ci.yml@v2.16.2
     with:
       module_name: security
       core_ref: ${{ github.event.inputs.core_ref || '' }}
