@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-10
+
 ### Security
 
 - **Downloads are now verified against the SHA-256 GitHub publishes.**
