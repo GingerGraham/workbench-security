@@ -10,6 +10,32 @@
 # _npm_global_install come from workbench-core's Core API
 # (lib/core/installers-common.sh) — not duplicated here.
 
+# 1Password Linux packaging key (rsa4096, created 2017-05-18, expires
+# 2032-05-16; uid "Code signing for 1Password <codesign@1password.com>").
+# Confirmed by Graham on 2026-10-02 by running `gpg --show-keys
+# --with-fingerprint` on the key served from _1PASSWORD_KEY_URL below. Not
+# checked against 1Password's documentation page. The same value is also
+# relied on by _1password-install-arch. Public OpenPGP fingerprint, not a
+# secret.
+_1PASSWORD_KEY_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22" # gitleaks:allow
+_1PASSWORD_KEY_URL="https://downloads.1password.com/linux/keys/1password.asc"
+
+# _1password_repo_rhel
+# Pinned local key and package allowlist (workbench-core D79). Rewritten on
+# every run so existing hosts converge.
+_1password_repo_rhel() {
+    # shellcheck disable=SC2016  # $basearch is for dnf, not the shell
+    _wb_dnf_vendor_repo \
+        --id 1password \
+        --name "1Password Stable Channel" \
+        --baseurl 'https://downloads.1password.com/linux/rpm/stable/$basearch' \
+        --key-url "${_1PASSWORD_KEY_URL}" \
+        --fingerprint "${_1PASSWORD_KEY_FPR}" \
+        --include 1password \
+        --include 1password-cli \
+        --repo-gpgcheck
+}
+
 # ── cosign install (Sigstore signing) ────────────────────────────────────────
 # Needed for full signature verification of tenv and of the tofu/terraform
 # binaries tenv downloads (workbench-iac). Bootstrapped from the official
@@ -32,11 +58,23 @@ install-cosign() {
         *) log_error "cosign: unsupported architecture ${WORKBENCH_ARCH}"; return 1 ;;
     esac
 
-    local url="https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-${arch}"
+    # Resolve the release explicitly so the asset can be verified against the
+    # SHA-256 GitHub publishes for it, falling back to cosign's own checksums
+    # file. _wb_fetch_verified writes via temp file + rename, so a re-install
+    # can never splice old and new binaries (security review M2, M3).
+    local api_response tag url expect
+    api_response="$(curl -fsS https://api.github.com/repos/sigstore/cosign/releases/latest)" \
+        || { log_error "cosign: could not query the latest release (network or GitHub API rate limit)"; return 1; }
+    tag="$(printf '%s' "${api_response}" | grep '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/' | head -1)"
+    [[ -z "${tag}" ]] && { log_error "cosign: could not determine the latest version"; return 1; }
+    url="https://github.com/sigstore/cosign/releases/download/${tag}/cosign-linux-${arch}"
+    expect="$(_wb_gh_asset_digest "${api_response}" "${url}")"
+    [[ -z "${expect}" ]] && expect="sums:https://github.com/sigstore/cosign/releases/download/${tag}/cosign_checksums.txt"
+
     mkdir -p "${HOME}/.local/bin"
-    log_info "cosign: downloading ${url##*/} ..."
-    _download_file_robust "${url}" "${HOME}/.local/bin/cosign" \
-        || { log_error "cosign: download failed"; return 1; }
+    log_info "cosign: downloading ${url##*/} (${tag}) ..."
+    _wb_fetch_verified "${url}" "${HOME}/.local/bin/cosign" "${expect}" \
+        || { log_error "cosign: download or verification failed"; return 1; }
     chmod +x "${HOME}/.local/bin/cosign"
     if command -v cosign &>/dev/null; then
         log_info "cosign installed: $(cosign version 2>/dev/null | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
@@ -139,6 +177,36 @@ installed-trivy() {
 }
 
 # ── Bitwarden install ─────────────────────────────────────────────────────────
+# _bitwarden_desktop_fetch_verified <asset-regex> <dest>
+# Fetches the newest desktop-v* release asset of bitwarden/clients matching
+# <asset-regex>, verified against the SHA-256 GitHub publishes for it
+# (security review M3).
+_bitwarden_desktop_fetch_verified() {
+    local pattern="$1" dest="$2" releases_json url digest
+    releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=50')" \
+        || { log_error "Could not query Bitwarden releases (network or GitHub API rate limit)"; return 1; }
+    url="$(printf '%s' "${releases_json}" \
+        | grep -Eo '"browser_download_url": *"[^"]+/desktop-v[^"]+"' \
+        | sed -E 's/.*"(https[^"]+)"/\1/' \
+        | grep -E "${pattern}" \
+        | head -1)"
+    [[ -z "${url}" ]] && { log_error "No Bitwarden desktop asset matching ${pattern}"; return 1; }
+    digest="$(_wb_gh_asset_digest "${releases_json}" "${url}")"
+    [[ -z "${digest}" ]] && { log_error "No published SHA-256 for ${url##*/} — refusing to install"; return 1; }
+    _wb_fetch_verified "${url}" "${dest}" "${digest}"
+}
+
+# _bitwarden_desktop_pattern <deb|rpm>
+# Prints the asset-name regex for this architecture, or fails. Only x86_64
+# is supported for the deb/rpm paths; aarch64 errors rather than guessing.
+_bitwarden_desktop_pattern() {
+    case "${WORKBENCH_ARCH}:$1" in
+        x86_64:rpm|amd64:rpm)   printf '%s' 'x86_64\.rpm$' ;;
+        x86_64:deb|amd64:deb)   printf '%s' 'amd64\.deb$' ;;
+        *) log_error "Bitwarden desktop: no verified ${1} package for ${WORKBENCH_ARCH}"; return 1 ;;
+    esac
+}
+
 install-bitwarden() {
     log_info "Installing or updating Bitwarden..."
     [[ -z "${PACKAGE_MANAGER:-}" ]] && { detect-package-manager || return 1; }
@@ -152,19 +220,29 @@ install-bitwarden() {
 
     case "${PACKAGE_MANAGER}" in
         apt)
-            local deb_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=deb"
-            _download_file_robust "${deb_url}" "${temp_dir}/bitwarden.deb" || { rm -rf "${temp_dir}"; return 1; }
+            local deb_pattern
+            deb_pattern="$(_bitwarden_desktop_pattern deb)" || { rm -rf "${temp_dir}"; return 1; }
+            _bitwarden_desktop_fetch_verified "${deb_pattern}" "${temp_dir}/bitwarden.deb" || { rm -rf "${temp_dir}"; return 1; }
             ${elevation_cmd} dpkg -i "${temp_dir}/bitwarden.deb" || true
             ${elevation_cmd} apt-get install -f -y
             ;;
         dnf|yum)
-            local rpm_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=rpm"
-            _download_file_robust "${rpm_url}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
-            ${elevation_cmd} "${PACKAGE_MANAGER}" install -y "${temp_dir}/bitwarden.rpm"
+            if command -v flatpak &>/dev/null; then
+                # Signed by Flathub and published by Bitwarden — preferred on
+                # Fedora over an unsigned local rpm.
+                flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+                flatpak install -y flathub com.bitwarden.desktop
+            else
+                local rpm_pattern
+                rpm_pattern="$(_bitwarden_desktop_pattern rpm)" || { rm -rf "${temp_dir}"; return 1; }
+                _bitwarden_desktop_fetch_verified "${rpm_pattern}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
+                ${elevation_cmd} "${PACKAGE_MANAGER}" install -y "${temp_dir}/bitwarden.rpm"
+            fi
             ;;
         zypper)
-            local rpm_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=rpm"
-            _download_file_robust "${rpm_url}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
+            local rpm_pattern
+            rpm_pattern="$(_bitwarden_desktop_pattern rpm)" || { rm -rf "${temp_dir}"; return 1; }
+            _bitwarden_desktop_fetch_verified "${rpm_pattern}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
             ${elevation_cmd} zypper install -y "${temp_dir}/bitwarden.rpm"
             ;;
         pacman)
@@ -238,15 +316,19 @@ install-bw-cli() {
                     *) log_error "Unsupported architecture: ${WORKBENCH_ARCH}"; return 1 ;;
                 esac
 
-                local version
-                version="$(curl -s https://api.github.com/repos/bitwarden/clients/releases \
+                local releases_json version
+                releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=50')" \
+                    || { log_error "Could not query Bitwarden releases (network or GitHub API rate limit)"; return 1; }
+                version="$(printf '%s' "${releases_json}" \
                     | grep '"tag_name"' | grep '"cli-' | head -1 \
                     | sed -E 's/.*"cli-v([0-9.]+)".*/\1/')"
                 [[ -z "${version}" ]] && { log_error "Could not determine bw CLI version"; return 1; }
 
                 local tmp_dir; tmp_dir="$(mktemp -d)"
                 local zip_url="https://github.com/bitwarden/clients/releases/download/cli-v${version}/bw-${bw_arch}-${version}.zip"
-                _download_file_robust "${zip_url}" "${tmp_dir}/bw.zip" || { rm -rf "${tmp_dir}"; return 1; }
+                local digest; digest="$(_wb_gh_asset_digest "${releases_json}" "${zip_url}")"
+                [[ -z "${digest}" ]] && { log_error "No published SHA-256 for ${zip_url##*/} — refusing to install"; rm -rf "${tmp_dir}"; return 1; }
+                _wb_fetch_verified "${zip_url}" "${tmp_dir}/bw.zip" "${digest}" || { rm -rf "${tmp_dir}"; return 1; }
                 unzip -q "${tmp_dir}/bw.zip" -d "${tmp_dir}"
                 mkdir -p "${HOME}/.local/bin"
                 install -m 755 "${tmp_dir}/bw" "${HOME}/.local/bin/bw"
@@ -282,7 +364,7 @@ installed-bw-cli() {
 
 # ── 1Password desktop app install ────────────────────────────────────────────
 # Official vendor repos per distro — package manager handles updates.
-# GPG key: 3FEF9748469ADBE15DA7CA80AC2D62742012EA22  # gitleaks:allow -- 1Password's published signing-key fingerprint, public by design
+# GPG key: see _1PASSWORD_KEY_FPR at the top of this file.
 
 _1password-install-debian() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
@@ -310,10 +392,7 @@ _1password-install-debian() {
 _1password-install-rhel() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
-
-    # shellcheck disable=SC2016
-    ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
+    _1password_repo_rhel || return 1
 
     if command -v dnf &>/dev/null; then
         ${elevation_cmd} dnf install -y 1password
@@ -325,27 +404,27 @@ _1password-install-rhel() {
 _1password-install-suse() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
+    _wb_rpm_import_pinned_key "${_1PASSWORD_KEY_URL}" 1password "${_1PASSWORD_KEY_FPR}" >/dev/null || return 1
     if ! zypper lr 2>/dev/null | grep -qi '1password'; then
         ${elevation_cmd} zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password
     else
         log_info "1Password zypper repo already present"
     fi
-    # Scoped to the 1password repo alone — a bare `refresh` auto-imports
-    # signing keys for every configured repo, not only the one just added
-    # (security review M4).
-    ${elevation_cmd} zypper --gpg-auto-import-keys refresh 1password  # pattern-scan:ignore -- scoped to a single named repo, not a bare refresh (see comment above)
+    # The pinned key is already imported above; --non-interactive rejects any
+    # other key the repo presents rather than auto-trusting it (D79 —
+    # review follow-up R2).
+    ${elevation_cmd} zypper --non-interactive refresh 1password
     ${elevation_cmd} zypper install -y 1password
 }
 
 _1password-install-arch() {
     # AUR package maintained by community
     if command -v yay &>/dev/null; then
-        gpg --receive-keys 3FEF9748469ADBE15DA7CA80AC2D62742012EA22 2>/dev/null || true
+        gpg --receive-keys "${_1PASSWORD_KEY_FPR}" 2>/dev/null || true
         yay -S --noconfirm 1password
     else
         log_info "yay not found — cloning 1password AUR package manually..."
-        gpg --receive-keys 3FEF9748469ADBE15DA7CA80AC2D62742012EA22 2>/dev/null || true
+        gpg --receive-keys "${_1PASSWORD_KEY_FPR}" 2>/dev/null || true
         local tmp_dir; tmp_dir="$(mktemp -d)"
         git clone https://aur.archlinux.org/1password.git "${tmp_dir}/1password" \
             || { log_error "Failed to clone AUR package"; rm -rf "${tmp_dir}"; return 1; }
@@ -445,13 +524,7 @@ _op-install-debian() {
 _op-install-rhel() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    # Repo may already exist from install-1password; rpm --import is idempotent
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
-
-    if [[ ! -f /etc/yum.repos.d/1password.repo ]]; then
-        # shellcheck disable=SC2016
-    ${elevation_cmd} sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
-    fi
+    _1password_repo_rhel || return 1
 
     if command -v dnf &>/dev/null; then
         ${elevation_cmd} dnf install -y 1password-cli
@@ -463,14 +536,14 @@ _op-install-rhel() {
 _op-install-suse() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
 
-    ${elevation_cmd} rpm --import https://downloads.1password.com/linux/keys/1password.asc
+    _wb_rpm_import_pinned_key "${_1PASSWORD_KEY_URL}" 1password "${_1PASSWORD_KEY_FPR}" >/dev/null || return 1
     if ! zypper lr 2>/dev/null | grep -qi '1password'; then
         ${elevation_cmd} zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password
     fi
-    # Scoped to the 1password repo alone — a bare `refresh` auto-imports
-    # signing keys for every configured repo, not only the one just added
-    # (security review M4).
-    ${elevation_cmd} zypper --gpg-auto-import-keys refresh 1password  # pattern-scan:ignore -- scoped to a single named repo, not a bare refresh (see comment above)
+    # The pinned key is already imported above; --non-interactive rejects any
+    # other key the repo presents rather than auto-trusting it (D79 —
+    # review follow-up R2).
+    ${elevation_cmd} zypper --non-interactive refresh 1password
     ${elevation_cmd} zypper install -y 1password-cli
 }
 
