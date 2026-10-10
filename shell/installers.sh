@@ -32,11 +32,23 @@ install-cosign() {
         *) log_error "cosign: unsupported architecture ${WORKBENCH_ARCH}"; return 1 ;;
     esac
 
-    local url="https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-${arch}"
+    # Resolve the release explicitly so the asset can be verified against the
+    # SHA-256 GitHub publishes for it, falling back to cosign's own checksums
+    # file. _wb_fetch_verified writes via temp file + rename, so a re-install
+    # can never splice old and new binaries (security review M2, M3).
+    local api_response tag url expect
+    api_response="$(curl -fsS https://api.github.com/repos/sigstore/cosign/releases/latest)" \
+        || { log_error "cosign: could not query the latest release (network or GitHub API rate limit)"; return 1; }
+    tag="$(printf '%s' "${api_response}" | grep '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/' | head -1)"
+    [[ -z "${tag}" ]] && { log_error "cosign: could not determine the latest version"; return 1; }
+    url="https://github.com/sigstore/cosign/releases/download/${tag}/cosign-linux-${arch}"
+    expect="$(_wb_gh_asset_digest "${api_response}" "${url}")"
+    [[ -z "${expect}" ]] && expect="sums:https://github.com/sigstore/cosign/releases/download/${tag}/cosign_checksums.txt"
+
     mkdir -p "${HOME}/.local/bin"
-    log_info "cosign: downloading ${url##*/} ..."
-    _download_file_robust "${url}" "${HOME}/.local/bin/cosign" \
-        || { log_error "cosign: download failed"; return 1; }
+    log_info "cosign: downloading ${url##*/} (${tag}) ..."
+    _wb_fetch_verified "${url}" "${HOME}/.local/bin/cosign" "${expect}" \
+        || { log_error "cosign: download or verification failed"; return 1; }
     chmod +x "${HOME}/.local/bin/cosign"
     if command -v cosign &>/dev/null; then
         log_info "cosign installed: $(cosign version 2>/dev/null | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
@@ -125,6 +137,36 @@ installed-trivy() {
 }
 
 # ── Bitwarden install ─────────────────────────────────────────────────────────
+# _bitwarden_desktop_fetch_verified <asset-regex> <dest>
+# Fetches the newest desktop-v* release asset of bitwarden/clients matching
+# <asset-regex>, verified against the SHA-256 GitHub publishes for it
+# (security review M3).
+_bitwarden_desktop_fetch_verified() {
+    local pattern="$1" dest="$2" releases_json url digest
+    releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=50')" \
+        || { log_error "Could not query Bitwarden releases (network or GitHub API rate limit)"; return 1; }
+    url="$(printf '%s' "${releases_json}" \
+        | grep -Eo '"browser_download_url": *"[^"]+/desktop-v[^"]+"' \
+        | sed -E 's/.*"(https[^"]+)"/\1/' \
+        | grep -E "${pattern}" \
+        | head -1)"
+    [[ -z "${url}" ]] && { log_error "No Bitwarden desktop asset matching ${pattern}"; return 1; }
+    digest="$(_wb_gh_asset_digest "${releases_json}" "${url}")"
+    [[ -z "${digest}" ]] && { log_error "No published SHA-256 for ${url##*/} — refusing to install"; return 1; }
+    _wb_fetch_verified "${url}" "${dest}" "${digest}"
+}
+
+# _bitwarden_desktop_pattern <deb|rpm>
+# Prints the asset-name regex for this architecture, or fails. Only x86_64
+# is supported for the deb/rpm paths; aarch64 errors rather than guessing.
+_bitwarden_desktop_pattern() {
+    case "${WORKBENCH_ARCH}:$1" in
+        x86_64:rpm|amd64:rpm)   printf '%s' 'x86_64\.rpm$' ;;
+        x86_64:deb|amd64:deb)   printf '%s' 'amd64\.deb$' ;;
+        *) log_error "Bitwarden desktop: no verified ${1} package for ${WORKBENCH_ARCH}"; return 1 ;;
+    esac
+}
+
 install-bitwarden() {
     log_info "Installing or updating Bitwarden..."
     [[ -z "${PACKAGE_MANAGER:-}" ]] && { detect-package-manager || return 1; }
@@ -138,19 +180,29 @@ install-bitwarden() {
 
     case "${PACKAGE_MANAGER}" in
         apt)
-            local deb_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=deb"
-            _download_file_robust "${deb_url}" "${temp_dir}/bitwarden.deb" || { rm -rf "${temp_dir}"; return 1; }
+            local deb_pattern
+            deb_pattern="$(_bitwarden_desktop_pattern deb)" || { rm -rf "${temp_dir}"; return 1; }
+            _bitwarden_desktop_fetch_verified "${deb_pattern}" "${temp_dir}/bitwarden.deb" || { rm -rf "${temp_dir}"; return 1; }
             ${elevation_cmd} dpkg -i "${temp_dir}/bitwarden.deb" || true
             ${elevation_cmd} apt-get install -f -y
             ;;
         dnf|yum)
-            local rpm_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=rpm"
-            _download_file_robust "${rpm_url}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
-            ${elevation_cmd} "${PACKAGE_MANAGER}" install -y "${temp_dir}/bitwarden.rpm"
+            if command -v flatpak &>/dev/null; then
+                # Signed by Flathub and published by Bitwarden — preferred on
+                # Fedora over an unsigned local rpm.
+                flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+                flatpak install -y flathub com.bitwarden.desktop
+            else
+                local rpm_pattern
+                rpm_pattern="$(_bitwarden_desktop_pattern rpm)" || { rm -rf "${temp_dir}"; return 1; }
+                _bitwarden_desktop_fetch_verified "${rpm_pattern}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
+                ${elevation_cmd} "${PACKAGE_MANAGER}" install -y "${temp_dir}/bitwarden.rpm"
+            fi
             ;;
         zypper)
-            local rpm_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=rpm"
-            _download_file_robust "${rpm_url}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
+            local rpm_pattern
+            rpm_pattern="$(_bitwarden_desktop_pattern rpm)" || { rm -rf "${temp_dir}"; return 1; }
+            _bitwarden_desktop_fetch_verified "${rpm_pattern}" "${temp_dir}/bitwarden.rpm" || { rm -rf "${temp_dir}"; return 1; }
             ${elevation_cmd} zypper install -y "${temp_dir}/bitwarden.rpm"
             ;;
         pacman)
@@ -224,15 +276,19 @@ install-bw-cli() {
                     *) log_error "Unsupported architecture: ${WORKBENCH_ARCH}"; return 1 ;;
                 esac
 
-                local version
-                version="$(curl -s https://api.github.com/repos/bitwarden/clients/releases \
+                local releases_json version
+                releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=50')" \
+                    || { log_error "Could not query Bitwarden releases (network or GitHub API rate limit)"; return 1; }
+                version="$(printf '%s' "${releases_json}" \
                     | grep '"tag_name"' | grep '"cli-' | head -1 \
                     | sed -E 's/.*"cli-v([0-9.]+)".*/\1/')"
                 [[ -z "${version}" ]] && { log_error "Could not determine bw CLI version"; return 1; }
 
                 local tmp_dir; tmp_dir="$(mktemp -d)"
                 local zip_url="https://github.com/bitwarden/clients/releases/download/cli-v${version}/bw-${bw_arch}-${version}.zip"
-                _download_file_robust "${zip_url}" "${tmp_dir}/bw.zip" || { rm -rf "${tmp_dir}"; return 1; }
+                local digest; digest="$(_wb_gh_asset_digest "${releases_json}" "${zip_url}")"
+                [[ -z "${digest}" ]] && { log_error "No published SHA-256 for ${zip_url##*/} — refusing to install"; rm -rf "${tmp_dir}"; return 1; }
+                _wb_fetch_verified "${zip_url}" "${tmp_dir}/bw.zip" "${digest}" || { rm -rf "${tmp_dir}"; return 1; }
                 unzip -q "${tmp_dir}/bw.zip" -d "${tmp_dir}"
                 mkdir -p "${HOME}/.local/bin"
                 install -m 755 "${tmp_dir}/bw" "${HOME}/.local/bin/bw"

@@ -64,8 +64,23 @@ _wb_alias_availability _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
 # `--wipe-slot=tpm2` only; recovery and password slots are never wiped.
 #
 # Usage:
-#   enroll-luks-tpm2
+#   enroll-luks-tpm2 [--with-pin]
+#
+# Without --with-pin the disk unlocks automatically whenever this machine
+# boots its unmodified boot chain — protection against a disk removed from
+# the machine, not against the whole machine being stolen. --with-pin also
+# requires a PIN at every boot (systemd-cryptenroll --tpm2-with-pin=yes).
 enroll-luks-tpm2() {
+    local with_pin=false
+    case "${1:-}" in
+        --with-pin) with_pin=true ;;
+        "") ;;
+        *) log_error "Usage: enroll-luks-tpm2 [--with-pin]"; return 2 ;;
+    esac
+    if [[ "${with_pin}" != "true" ]]; then
+        log_info "TPM2-only unlock: a stolen laptop still boots to the unlocked disk and only the login screen protects the data. Re-run with --with-pin to also require a PIN at boot."
+    fi
+
     _tpm_require_tools      || return 1
     _tpm_check_tpm2_device  || return 1
     sudo-test                || return 1
@@ -91,7 +106,7 @@ enroll-luks-tpm2() {
             continue
         fi
 
-        _tpm_enroll_device "${device_path}" && ((enrolled_count++))
+        _tpm_enroll_device "${device_path}" "${with_pin}" && ((enrolled_count++))
     done
 
     log_info "TPM2 enrollment complete. Enrolled ${enrolled_count} device(s)."
@@ -256,11 +271,12 @@ _tpm_device_label() {
     fi
 }
 
-# _tpm_enroll_device <device_path>
+# _tpm_enroll_device <device_path> [with_pin]
 # Single-device TPM2 enrollment body — shared by enroll-luks-tpm2's device
 # loop and rotate-luks-key's post-rotation offer, so both stay in sync.
+# with_pin=true adds --tpm2-with-pin=yes (security review L8).
 _tpm_enroll_device() {
-    local device_path="$1"
+    local device_path="$1" with_pin="${2:-false}"
 
     _tpm_ensure_recovery_key "${device_path}" || {
         log_warn "skipping ${device_path} — recovery key not confirmed"
@@ -275,8 +291,15 @@ _tpm_enroll_device() {
         wipe_flag=(--wipe-slot=tpm2)
     fi
 
+    local pin_flag=()
+    if [[ "${with_pin}" == "true" ]]; then
+        pin_flag=(--tpm2-with-pin=yes)
+        log_info "You will be asked to choose a PIN. It will be required at every boot."
+    fi
+
     if sudo systemd-cryptenroll \
             "${wipe_flag[@]}" \
+            "${pin_flag[@]}" \
             --tpm2-device=auto \
             --tpm2-pcrs="0+2+5+7" \
             "${device_path}"; then
@@ -427,39 +450,37 @@ _tpm_bw_status() {
     bw status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null
 }
 
+# _tpm_secret_tmpdir
+# Fresh 0700 directory for transient secret material. Prefers
+# $XDG_RUNTIME_DIR (per-user tmpfs, removed at logout), then /dev/shm, then
+# $TMPDIR. Sweeps this user's leftovers older than 60 minutes first (security
+# review M6).
+_tpm_secret_tmpdir() {
+    local base=""
+    if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "${XDG_RUNTIME_DIR}" && -w "${XDG_RUNTIME_DIR}" ]]; then
+        base="${XDG_RUNTIME_DIR}"
+    elif [[ -d /dev/shm && -w /dev/shm ]]; then
+        base="/dev/shm"
+    else
+        base="${TMPDIR:-/tmp}"
+    fi
+    find "${base}" -maxdepth 1 -type d -name 'wb-tpm.*' -user "$(id -u)" -mmin +60 -exec rm -rf {} + 2>/dev/null
+    ( umask 077; mktemp -d "${base%/}/wb-tpm.XXXXXX" )
+}
+
 _tpm_bw_store_recovery() {
-    local title="$1" body="$2" encoded tmp_json
-
-    tmp_json="$(mktemp)" || {
-        log_error "disk-encryption: failed to create temp file for Bitwarden item"
-        return 1
-    }
-
-    bw get template item 2>/dev/null | python3 -c '
+    local title="$1" body="$2"
+    # The recovery key reaches python on stdin via printf (a builtin), and the
+    # encoded item reaches bw on stdin — never argv, never a file (security
+    # review M5).
+    if printf '%s' "${body}" | python3 -c '
 import json, sys
-tpl = json.load(sys.stdin)
-tpl["type"] = 2
-tpl["name"] = sys.argv[1]
-tpl["secureNote"] = {"type": 0}
-tpl["notes"] = sys.argv[2]
-print(json.dumps(tpl))
-' "${title}" "${body}" > "${tmp_json}"
-
-    if [[ ! -s "${tmp_json}" ]]; then
-        log_error "disk-encryption: failed to build Bitwarden item"
-        rm -f "${tmp_json}"
-        return 1
-    fi
-
-    encoded="$(bw encode < "${tmp_json}")"
-    rm -f "${tmp_json}"
-
-    if [[ -z "${encoded}" ]]; then
-        log_error "disk-encryption: bw encode returned empty output"
-        return 1
-    fi
-
-    if bw create item "${encoded}" >/dev/null 2>&1; then
+print(json.dumps({
+    "organizationId": None, "folderId": None, "type": 2,
+    "name": sys.argv[1], "notes": sys.stdin.read(), "favorite": False,
+    "secureNote": {"type": 0}, "fields": []
+}))
+' "${title}" | bw encode | bw create item >/dev/null 2>&1; then
         log_info "disk-encryption: recovery key stored in Bitwarden as '${title}'"
     else
         log_error "disk-encryption: failed to create Bitwarden item '${title}'"
@@ -468,8 +489,29 @@ print(json.dumps(tpl))
 }
 
 _tpm_op_store_recovery() {
-    local title="$1" body="$2"
-    if op item create --category "Secure Note" --title "${title}" "notesPlain=${body}" >/dev/null 2>&1; then
+    local title="$1" body="$2" tmp_dir template rc
+    # Item passed via --template (a file in a private runtime directory), not
+    # as "notesPlain=<recovery key>" in argv (security review M5).
+    tmp_dir="$(_tpm_secret_tmpdir)" || { log_error "disk-encryption: could not create a private temp directory"; return 1; }
+    template="$(op item template get "Secure Note" 2>/dev/null)" || { rm -rf "${tmp_dir}"; log_error "disk-encryption: op item template get failed"; return 1; }
+    if ! printf '%s' "${body}" | python3 -c '
+import json, sys
+tpl = json.loads(sys.argv[1])
+tpl["title"] = sys.argv[2]
+for field in tpl.get("fields", []):
+    if field.get("id") == "notesPlain":
+        field["value"] = sys.stdin.read()
+with open(sys.argv[3], "w") as out:
+    json.dump(tpl, out)
+' "${template}" "${title}" "${tmp_dir}/item.json"; then
+        rm -rf "${tmp_dir}"
+        log_error "disk-encryption: failed to build 1Password item '${title}'"
+        return 1
+    fi
+    op item create --template "${tmp_dir}/item.json" >/dev/null 2>&1
+    rc=$?
+    rm -rf "${tmp_dir}"
+    if [[ ${rc} -eq 0 ]]; then
         log_info "disk-encryption: recovery key stored in 1Password as '${title}'"
     else
         log_error "disk-encryption: failed to create 1Password item '${title}'"
