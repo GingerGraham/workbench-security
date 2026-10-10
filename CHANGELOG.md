@@ -4,6 +4,18 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **The pacman Bitwarden AppImage is now verified, and the 1Password CLI
+  binary fallback validates its version.** Without `yay`, `install-bitwarden`
+  on Arch downloads the AppImage from the `bitwarden/clients` release and
+  checks it against the SHA-256 GitHub publishes, instead of fetching it
+  through a bitwarden.com redirect (aarch64 errors, since no arm64 AppImage
+  is built). `install-op-cli`'s no-package-manager fallback now uses
+  `curl -fsS` for the version lookup and accepts only a plain dotted version
+  number before putting it in the download URL. The 1Password CLI zip itself
+  is still not verified; see the pull request for why.
+
 ## [0.4.0] - 2026-10-10
 
 ### Security
