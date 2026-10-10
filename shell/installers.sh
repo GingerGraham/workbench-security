@@ -183,10 +183,15 @@ installed-trivy() {
 # (security review M3).
 _bitwarden_desktop_fetch_verified() {
     local pattern="$1" dest="$2" releases_json url digest
-    releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=50')" \
+    # per_page=100 (the API maximum): bitwarden/clients publishes cli-, web-,
+    # browser- and desktop- releases in one list, so a short page can miss the
+    # newest desktop release entirely.
+    releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=100')" \
         || { log_error "Could not query Bitwarden releases (network or GitHub API rate limit)"; return 1; }
+    # Only stable desktop-vX.Y.Z releases: a -beta.N or -rc.N tag in the URL
+    # path never matches, so a pre-release listed first is not installed.
     url="$(printf '%s' "${releases_json}" \
-        | grep -Eo '"browser_download_url": *"[^"]+/desktop-v[^"]+"' \
+        | grep -Eo '"browser_download_url": *"[^"]+/desktop-v[0-9]+(\.[0-9]+)*/[^"]+"' \
         | sed -E 's/.*"(https[^"]+)"/\1/' \
         | grep -E "${pattern}" \
         | head -1)"
@@ -317,7 +322,7 @@ install-bw-cli() {
                 esac
 
                 local releases_json version
-                releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=50')" \
+                releases_json="$(curl -fsS 'https://api.github.com/repos/bitwarden/clients/releases?per_page=100')" \
                     || { log_error "Could not query Bitwarden releases (network or GitHub API rate limit)"; return 1; }
                 version="$(printf '%s' "${releases_json}" \
                     | grep '"tag_name"' | grep '"cli-' | head -1 \
