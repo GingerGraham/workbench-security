@@ -64,8 +64,23 @@ _wb_alias_availability _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
 # `--wipe-slot=tpm2` only; recovery and password slots are never wiped.
 #
 # Usage:
-#   enroll-luks-tpm2
+#   enroll-luks-tpm2 [--with-pin]
+#
+# Without --with-pin the disk unlocks automatically whenever this machine
+# boots its unmodified boot chain — protection against a disk removed from
+# the machine, not against the whole machine being stolen. --with-pin also
+# requires a PIN at every boot (systemd-cryptenroll --tpm2-with-pin=yes).
 enroll-luks-tpm2() {
+    local with_pin=false
+    case "${1:-}" in
+        --with-pin) with_pin=true ;;
+        "") ;;
+        *) log_error "Usage: enroll-luks-tpm2 [--with-pin]"; return 2 ;;
+    esac
+    if [[ "${with_pin}" != "true" ]]; then
+        log_info "TPM2-only unlock: a stolen laptop still boots to the unlocked disk and only the login screen protects the data. Re-run with --with-pin to also require a PIN at boot."
+    fi
+
     _tpm_require_tools      || return 1
     _tpm_check_tpm2_device  || return 1
     sudo-test                || return 1
@@ -91,7 +106,7 @@ enroll-luks-tpm2() {
             continue
         fi
 
-        _tpm_enroll_device "${device_path}" && ((enrolled_count++))
+        _tpm_enroll_device "${device_path}" "${with_pin}" && ((enrolled_count++))
     done
 
     log_info "TPM2 enrollment complete. Enrolled ${enrolled_count} device(s)."
@@ -256,11 +271,12 @@ _tpm_device_label() {
     fi
 }
 
-# _tpm_enroll_device <device_path>
+# _tpm_enroll_device <device_path> [with_pin]
 # Single-device TPM2 enrollment body — shared by enroll-luks-tpm2's device
 # loop and rotate-luks-key's post-rotation offer, so both stay in sync.
+# with_pin=true adds --tpm2-with-pin=yes (security review L8).
 _tpm_enroll_device() {
-    local device_path="$1"
+    local device_path="$1" with_pin="${2:-false}"
 
     _tpm_ensure_recovery_key "${device_path}" || {
         log_warn "skipping ${device_path} — recovery key not confirmed"
@@ -275,8 +291,15 @@ _tpm_enroll_device() {
         wipe_flag=(--wipe-slot=tpm2)
     fi
 
+    local pin_flag=()
+    if [[ "${with_pin}" == "true" ]]; then
+        pin_flag=(--tpm2-with-pin=yes)
+        log_info "You will be asked to choose a PIN. It will be required at every boot."
+    fi
+
     if sudo systemd-cryptenroll \
             "${wipe_flag[@]}" \
+            "${pin_flag[@]}" \
             --tpm2-device=auto \
             --tpm2-pcrs="0+2+5+7" \
             "${device_path}"; then
