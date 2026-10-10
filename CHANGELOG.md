@@ -4,6 +4,13 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`enroll-luks-tpm2` no longer fails under `set -u` on bash older than
+  4.4.** The optional `systemd-cryptenroll` flag arrays are now expanded with
+  the empty-safe `${arr[@]+"${arr[@]}"}` idiom, since an empty array counted
+  as unbound there.
+
 ## [0.4.0] - 2026-10-10
 
 ### Security

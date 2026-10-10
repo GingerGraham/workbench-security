@@ -298,8 +298,8 @@ _tpm_enroll_device() {
     fi
 
     if sudo systemd-cryptenroll \
-            "${wipe_flag[@]}" \
-            "${pin_flag[@]}" \
+            ${wipe_flag[@]+"${wipe_flag[@]}"} \
+            ${pin_flag[@]+"${pin_flag[@]}"} \
             --tpm2-device=auto \
             --tpm2-pcrs="0+2+5+7" \
             "${device_path}"; then
