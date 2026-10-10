@@ -6,6 +6,27 @@ All notable changes to `workbench-security` are documented here.
 
 ### Security
 
+- **Downloads are now verified against the SHA-256 GitHub publishes.**
+  `install-cosign` resolves the release explicitly and verifies the binary
+  (falling back to cosign's checksums file), installing via temp file and
+  rename so a re-install cannot splice old and new binaries; the
+  `install-bw-cli` binary fallback refuses to install without a published
+  digest; `install-bitwarden` (apt, dnf/yum, zypper) fetches the desktop
+  package from the `bitwarden/clients` release with digest verification
+  instead of an unsigned bitwarden.com redirect, and on dnf/yum prefers the
+  Flathub build when `flatpak` is present. Desktop deb/rpm on aarch64 now
+  errors instead of guessing. Requires Core API 1.4 (`core_api` floor
+  raised to `>=1.4 <2.0`) (security review M2, M3).
+- **LUKS recovery keys and the SonarQube token no longer appear in
+  process argv or on disk in the clear.** The Bitwarden path pipes the item
+  through `bw encode | bw create item` on stdin instead of passing the
+  recovery key to `python3` and `bw` as arguments and writing it to a
+  `mktemp` file; the 1Password path builds the item from `op item template
+  get` and passes it with `--template` from a private 0700 directory under
+  `$XDG_RUNTIME_DIR` (or `/dev/shm`) that is removed afterwards, instead of
+  `notesPlain=<key>` in argv; `sq` passes the token as `SONAR_TOKEN` in the
+  scanner's environment instead of `-Dsonar.token=<token>` (security
+  review M5, M6).
 - **1Password's repository key is now pinned and local.** On RHEL-family
   hosts, `install-1password` and `install-op-cli` write one shared repo
   definition through core's `_wb_dnf_vendor_repo`: the key is a pinned local
@@ -18,6 +39,13 @@ All notable changes to `workbench-security` are documented here.
   presents. A vendor key rotation now fails the install until this module
   releases an updated pin (workbench-core D79; security review M4, R1, R2).
   Requires Core API 1.5 (`core_api` floor raised to `>=1.5 <2.0`).
+
+### Added
+
+- **`enroll-luks-tpm2 --with-pin`** enrolls TPM2 unlock that also requires a
+  PIN at every boot, and plain `enroll-luks-tpm2` now says that TPM2-only
+  unlock leaves a stolen, powered-off laptop booting to an unlocked disk.
+  README documents the threat model (security review L8).
 
 ## [0.3.1] - 2026-09-25
 
