@@ -6,6 +6,17 @@ All notable changes to `workbench-security` are documented here.
 
 ### Security
 
+- **Downloads are now verified against the SHA-256 GitHub publishes.**
+  `install-cosign` resolves the release explicitly and verifies the binary
+  (falling back to cosign's checksums file), installing via temp file and
+  rename so a re-install cannot splice old and new binaries; the
+  `install-bw-cli` binary fallback refuses to install without a published
+  digest; `install-bitwarden` (apt, dnf/yum, zypper) fetches the desktop
+  package from the `bitwarden/clients` release with digest verification
+  instead of an unsigned bitwarden.com redirect, and on dnf/yum prefers the
+  Flathub build when `flatpak` is present. Desktop deb/rpm on aarch64 now
+  errors instead of guessing. Requires Core API 1.4 (`core_api` floor
+  raised to `>=1.4 <2.0`) (security review M2, M3).
 - **LUKS recovery keys and the SonarQube token no longer appear in
   process argv or on disk in the clear.** The Bitwarden path pipes the item
   through `bw encode | bw create item` on stdin instead of passing the
