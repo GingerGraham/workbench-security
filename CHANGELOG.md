@@ -16,18 +16,15 @@ All notable changes to `workbench-security` are documented here.
 
 ### Fixed
 
-<<<<<<< HEAD
-- **`enroll-luks-tpm2` no longer fails under `set -u` on bash older than
-  4.4.** The optional `systemd-cryptenroll` flag arrays are now expanded with
-  the empty-safe `${arr[@]+"${arr[@]}"}` idiom, since an empty array counted
-  as unbound there.
-=======
 - **`install-bitwarden` no longer picks a pre-release desktop build.** The
   Bitwarden desktop asset lookup now accepts only stable `desktop-vX.Y.Z`
   releases (a `-beta.N` release listed first used to be chosen), and both it
   and the `install-bw-cli` binary fallback read 100 releases instead of 50 so
   a busy release list cannot hide the newest desktop or CLI release.
->>>>>>> origin/main
+- **`enroll-luks-tpm2` no longer fails under `set -u` on bash older than
+  4.4.** The optional `systemd-cryptenroll` flag arrays are now expanded with
+  the empty-safe `${arr[@]+"${arr[@]}"}` idiom, since an empty array counted
+  as unbound there.
 
 ## [0.4.0] - 2026-10-10
 
