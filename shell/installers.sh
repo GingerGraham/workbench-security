@@ -236,6 +236,7 @@ _bitwarden_desktop_pattern() {
     case "${WORKBENCH_ARCH}:$1" in
         x86_64:rpm|amd64:rpm)   printf '%s' 'x86_64\.rpm$' ;;
         x86_64:deb|amd64:deb)   printf '%s' 'amd64\.deb$' ;;
+        x86_64:appimage|amd64:appimage) printf '%s' 'x86_64\.AppImage$' ;;
         *) log_error "Bitwarden desktop: no verified ${1} package for ${WORKBENCH_ARCH}"; return 1 ;;
     esac
 }
@@ -283,8 +284,11 @@ install-bitwarden() {
                 yay -S --noconfirm bitwarden-bin
             else
                 mkdir -p "${HOME}/Applications"
-                local ai_url="https://bitwarden.com/download/?app=desktop&platform=linux&variant=appimage"
-                _download_file_robust "${ai_url}" "${HOME}/Applications/Bitwarden.AppImage" || { rm -rf "${temp_dir}"; return 1; }
+                # Verified against the SHA-256 GitHub publishes for the release
+                # asset, not fetched through the bitwarden.com redirect.
+                local ai_pattern
+                ai_pattern="$(_bitwarden_desktop_pattern appimage)" || { rm -rf "${temp_dir}"; return 1; }
+                _bitwarden_desktop_fetch_verified "${ai_pattern}" "${HOME}/Applications/Bitwarden.AppImage" || { rm -rf "${temp_dir}"; return 1; }
                 chmod +x "${HOME}/Applications/Bitwarden.AppImage"
             fi
             ;;
@@ -609,14 +613,22 @@ _op-install-binary() {
     # on BSD grep (macOS default, though this specific fallback path is
     # Linux-only). sed's basic capture-group syntax works on both.
     local version
-    version="$(curl -s https://app-updates.agilebits.com/product_history/CLI2 \
+    version="$(curl -fsS https://app-updates.agilebits.com/product_history/CLI2 \
         | sed -n 's/.*<li class="[^"]*"><span class="version">\([^<]*\)<.*/\1/p' \
         | head -1)"
+    # The version is interpolated into a download URL: accept only a plain
+    # dotted number, so a malformed or hostile page cannot steer the URL.
+    printf '%s' "${version}" | grep -Eq '^[0-9]+(\.[0-9]+)*$' || version=""
     if [[ -z "${version}" ]]; then
         log_error "op: could not determine latest version — install via package manager instead (install-op-cli handles this automatically on known distros)"
         return 1
     fi
 
+    # KNOWN GAP: this zip is not verified. No SHA-256 or signature that could be
+    # checked against a primary source was available when this was written, so
+    # none is checked here; the package-manager paths (install-op-cli on known
+    # distros) verify the pinned 1Password repo key instead. Add verification
+    # here once the vendor's published method is confirmed.
     local zip_url="https://cache.agilebits.com/dist/1P/op2/pkg/v${version}/op_linux_${op_arch}_v${version}.zip"
     local tmp_dir; tmp_dir="$(mktemp -d)"
     _download_file_robust "${zip_url}" "${tmp_dir}/op.zip" || { rm -rf "${tmp_dir}"; return 1; }
