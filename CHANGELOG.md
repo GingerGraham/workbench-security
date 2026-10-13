@@ -23,6 +23,14 @@ All notable changes to `workbench-security` are documented here.
   number before putting it in the download URL. The 1Password CLI zip itself
   is still not verified; see the pull request for why.
 
+### Fixed
+
+- **`install-bitwarden` no longer picks a pre-release desktop build.** The
+  Bitwarden desktop asset lookup now accepts only stable `desktop-vX.Y.Z`
+  releases (a `-beta.N` release listed first used to be chosen), and both it
+  and the `install-bw-cli` binary fallback read 100 releases instead of 50 so
+  a busy release list cannot hide the newest desktop or CLI release.
+
 ## [0.4.0] - 2026-10-10
 
 ### Security
