@@ -13,6 +13,15 @@ All notable changes to `workbench-security` are documented here.
   `gpg --dearmor`-ing whatever the download returned; a mismatch aborts
   before apt is touched. The debsig policy is now downloaded to a temp file
   and installed only if the download succeeds (workbench-core D79).
+- **The pacman Bitwarden AppImage is now verified, and the 1Password CLI
+  binary fallback validates its version.** Without `yay`, `install-bitwarden`
+  on Arch downloads the AppImage from the `bitwarden/clients` release and
+  checks it against the SHA-256 GitHub publishes, instead of fetching it
+  through a bitwarden.com redirect (aarch64 errors, since no arm64 AppImage
+  is built). `install-op-cli`'s no-package-manager fallback now uses
+  `curl -fsS` for the version lookup and accepts only a plain dotted version
+  number before putting it in the download URL. The 1Password CLI zip itself
+  is still not verified; see the pull request for why.
 
 ### Fixed
 
