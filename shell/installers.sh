@@ -20,6 +20,34 @@
 _1PASSWORD_KEY_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22" # gitleaks:allow
 _1PASSWORD_KEY_URL="https://downloads.1password.com/linux/keys/1password.asc"
 
+# _1password_apt_keyring
+# Installs only the pinned 1Password key as the apt signed-by keyring
+# (workbench-core D79). Shared by the desktop and CLI Debian paths.
+_1password_apt_keyring() {
+    _wb_apt_keyring_pinned "${_1PASSWORD_KEY_URL}" \
+        /usr/share/keyrings/1password-archive-keyring.gpg "${_1PASSWORD_KEY_FPR}"
+}
+
+# _1password_debsig_keyring
+# Installs only the pinned 1Password key as the debsig-verify keyring. That
+# path is outside the directories _wb_apt_keyring_pinned accepts, so the key
+# is filtered with _wb_key_extract_pinned and installed directly.
+_1password_debsig_keyring() {
+    local elevation_cmd tmp_dir rc
+    elevation_cmd="$(get-elevation-command)" || return 1
+    tmp_dir="$(mktemp -d)" || return 1
+    if ! _download_file_robust "${_1PASSWORD_KEY_URL}" "${tmp_dir}/downloaded" \
+        || ! _wb_key_extract_pinned "${tmp_dir}/downloaded" "${tmp_dir}/pinned.gpg" binary "${_1PASSWORD_KEY_FPR}"; then
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
+    ${elevation_cmd} install -D -m 0644 "${tmp_dir}/pinned.gpg" \
+        /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+    rc=$?
+    rm -rf "${tmp_dir}"
+    return ${rc}
+}
+
 # _1password_repo_rhel
 # Pinned local key and package allowlist (workbench-core D79). Rewritten on
 # every run so existing hosts converge.
@@ -374,20 +402,22 @@ _1password-install-debian() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
     command -v curl &>/dev/null || { log_error "curl is required"; return 1; }
 
-    ${elevation_cmd} mkdir -p /usr/share/keyrings
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc \
-        | ${elevation_cmd} gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+    _1password_apt_keyring || return 1
 
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" \
         | ${elevation_cmd} tee /etc/apt/sources.list.d/1password.list > /dev/null
 
-    ${elevation_cmd} mkdir -p /etc/debsig/policies/AC2D62742012EA22/
-    curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol \
-        | ${elevation_cmd} tee /etc/debsig/policies/AC2D62742012EA22/1password.pol > /dev/null
-    ${elevation_cmd} mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc \
-        | ${elevation_cmd} gpg --dearmor \
-            --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+    # The policy file has no published checksum; download to a temp file so an
+    # HTTP error can never be installed as the policy.
+    local pol_dir; pol_dir="$(mktemp -d)" || return 1
+    if ! _download_file_robust https://downloads.1password.com/linux/debian/debsig/1password.pol "${pol_dir}/1password.pol" \
+        || ! ${elevation_cmd} install -D -m 0644 "${pol_dir}/1password.pol" /etc/debsig/policies/AC2D62742012EA22/1password.pol; then
+        rm -rf "${pol_dir}"
+        log_error "1password: failed to install the debsig policy"
+        return 1
+    fi
+    rm -rf "${pol_dir}"
+    _1password_debsig_keyring || return 1
 
     ${elevation_cmd} apt-get update
     ${elevation_cmd} apt-get install -y 1password
@@ -514,9 +544,7 @@ _op-install-debian() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
     command -v curl &>/dev/null || { log_error "curl is required"; return 1; }
 
-    ${elevation_cmd} mkdir -p /usr/share/keyrings
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc \
-        | ${elevation_cmd} gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+    _1password_apt_keyring || return 1
 
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" \
         | ${elevation_cmd} tee /etc/apt/sources.list.d/1password.list > /dev/null

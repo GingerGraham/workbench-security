@@ -6,6 +6,13 @@ All notable changes to `workbench-security` are documented here.
 
 ### Security
 
+- **1Password's Debian keyrings are now pinned.** `install-1password` and
+  `install-op-cli` on Debian-family hosts install only the key whose
+  fingerprint matches the pinned 1Password value, for both the apt
+  `signed-by` keyring and the debsig-verify keyring, instead of
+  `gpg --dearmor`-ing whatever the download returned; a mismatch aborts
+  before apt is touched. The debsig policy is now downloaded to a temp file
+  and installed only if the download succeeds (workbench-core D79).
 - **The pacman Bitwarden AppImage is now verified, and the 1Password CLI
   binary fallback validates its version.** Without `yay`, `install-bitwarden`
   on Arch downloads the AppImage from the `bitwarden/clients` release and
