@@ -4,6 +4,16 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **1Password's Debian keyrings are now pinned.** `install-1password` and
+  `install-op-cli` on Debian-family hosts install only the key whose
+  fingerprint matches the pinned 1Password value, for both the apt
+  `signed-by` keyring and the debsig-verify keyring, instead of
+  `gpg --dearmor`-ing whatever the download returned; a mismatch aborts
+  before apt is touched. The debsig policy is now downloaded to a temp file
+  and installed only if the download succeeds (workbench-core D79).
+
 ### Fixed
 
 - **`enroll-luks-tpm2` no longer fails under `set -u` on bash older than
