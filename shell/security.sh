@@ -37,9 +37,3 @@ if command -v nc &>/dev/null; then
     alias netcat="nc"
     alias telnet="nc"
 fi
-
-get-security-functions() {
-    local _dir; _dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    _get_functions_in "Security functions" "" "${_dir}/security.sh" "${_dir}/disk-encryption.sh"
-    _get_aliases_in "Security aliases" "" "${_dir}/security.sh"
-}

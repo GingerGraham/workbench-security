@@ -20,6 +20,12 @@
 _1PASSWORD_KEY_FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22" # gitleaks:allow
 _1PASSWORD_KEY_URL="https://downloads.1password.com/linux/keys/1password.asc"
 
+# Trivy repository signing key. Verified 2026-10-13 against
+# aquasecurity/trivy-repo (commit c3acd29, "chore: update public keys") and
+# a good signature on the live deb InRelease; rotated 2026-04-17 after
+# CVE-2026-33634. Public OpenPGP fingerprint, not a secret.
+_TRIVY_KEY_FPR="825AD9036F7C850E6A6FED4935B8ACA44FD9CA9F" # gitleaks:allow
+
 # _1password_apt_keyring
 # Installs only the pinned 1Password key as the apt signed-by keyring
 # (workbench-core D79). Shared by the desktop and CLI Debian paths.
@@ -118,19 +124,18 @@ installed-cosign() {
 # ── Trivy install ─────────────────────────────────────────────────────────────
 _trivy-repo-rpm() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
-    # Rewritten on every run (no early return) so existing hosts converge on the
-    # includepkgs allowlist (workbench-core D79). Aqua publishes no fingerprint
-    # for this key, so it is not pinned: gpgkey= stays remote until Graham
-    # decides whether to pin the current fingerprint on his own verification.
-    cat <<'EOF' | ${elevation_cmd} tee /etc/yum.repos.d/trivy.repo
-[trivy]
-name=Trivy
-baseurl=https://aquasecurity.github.io/trivy-repo/rpm/releases/$basearch/
-gpgcheck=1
-enabled=1
-gpgkey=https://aquasecurity.github.io/trivy-repo/rpm/public.key
-includepkgs=trivy
-EOF
+    # Pinned local key and package allowlist (workbench-core D79). Rewritten
+    # on every run so existing hosts converge. No --repo-gpgcheck: the repo
+    # publishes no repomd.xml.asc.
+    # shellcheck disable=SC2016  # $basearch is for dnf, not the shell
+    _wb_dnf_vendor_repo \
+        --id trivy \
+        --name "Trivy" \
+        --baseurl 'https://aquasecurity.github.io/trivy-repo/rpm/releases/$basearch/' \
+        --key-url "https://aquasecurity.github.io/trivy-repo/rpm/public.key" \
+        --fingerprint "${_TRIVY_KEY_FPR}" \
+        --include trivy \
+        || return 1
     # check-update exits 100 when updates are available, which is success here;
     # only other non-zero codes are real errors. Without this, `_trivy-repo-rpm
     # && dnf install` would silently skip the install whenever an update exists.
@@ -145,14 +150,14 @@ EOF
     return "${rc}"
 }
 
+# Pinned key only (workbench-core D79). No early return: a host that
+# imported the pre-rotation key converges on the pinned keyring.
 _trivy-repo-deb() {
     local elevation_cmd; elevation_cmd="$(get-elevation-command)" || return 1
-    [[ -f /etc/apt/sources.list.d/trivy.list ]] && { log_info "Trivy repo already configured"; return 0; }
-    ${elevation_cmd} apt-get install -y wget gnupg
-    wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
-        | gpg --dearmor | ${elevation_cmd} tee /usr/share/keyrings/trivy.gpg >/dev/null
+    _wb_apt_keyring_pinned "https://aquasecurity.github.io/trivy-repo/deb/public.key" \
+        /usr/share/keyrings/trivy.gpg "${_TRIVY_KEY_FPR}" || return 1
     echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
-        | ${elevation_cmd} tee /etc/apt/sources.list.d/trivy.list
+        | ${elevation_cmd} tee /etc/apt/sources.list.d/trivy.list >/dev/null
     ${elevation_cmd} apt-get update
 }
 
@@ -620,29 +625,42 @@ _op-install-binary() {
     # dotted number, so a malformed or hostile page cannot steer the URL.
     printf '%s' "${version}" | grep -Eq '^[0-9]+(\.[0-9]+)*$' || version=""
     if [[ -z "${version}" ]]; then
-        log_error "op: could not determine latest version — install via package manager instead (install-op-cli handles this automatically on known distros)"
+        log_error "op: could not determine latest version — install via package manager instead (wb tools install op-cli handles this automatically on known distros)"
         return 1
     fi
 
-    # KNOWN GAP: this zip is not verified. No SHA-256 or signature that could be
-    # checked against a primary source was available when this was written, so
-    # none is checked here; the package-manager paths (install-op-cli on known
-    # distros) verify the pinned 1Password repo key instead. Add verification
-    # here once the vendor's published method is confirmed.
+    # Verified against the pinned 1Password signing key (the same
+    # _1PASSWORD_KEY_FPR the repo paths pin): the zip carries a detached
+    # op.sig, documented at 1password.dev/cli/verify. Fails closed.
+    command -v gpgv &>/dev/null || { log_error "op: gpgv is required to verify the download (package gnupg/gpgv)"; return 1; }
     local zip_url="https://cache.agilebits.com/dist/1P/op2/pkg/v${version}/op_linux_${op_arch}_v${version}.zip"
-    local tmp_dir; tmp_dir="$(mktemp -d)"
-    _download_file_robust "${zip_url}" "${tmp_dir}/op.zip" || { rm -rf "${tmp_dir}"; return 1; }
-    unzip -q "${tmp_dir}/op.zip" -d "${tmp_dir}"
+    local tmp_dir; tmp_dir="$(mktemp -d)" || return 1
+    if ! _download_file_robust "${zip_url}" "${tmp_dir}/op.zip" \
+        || ! unzip -q "${tmp_dir}/op.zip" -d "${tmp_dir}/zip" \
+        || [[ ! -f "${tmp_dir}/zip/op" || ! -f "${tmp_dir}/zip/op.sig" ]]; then
+        log_error "op: download or unpack failed, or op.sig is missing — not installing"
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
+    if ! _download_file_robust "${_1PASSWORD_KEY_URL}" "${tmp_dir}/key.asc" \
+        || ! _wb_key_extract_pinned "${tmp_dir}/key.asc" "${tmp_dir}/pinned.gpg" binary "${_1PASSWORD_KEY_FPR}" \
+        || ! gpgv --keyring "${tmp_dir}/pinned.gpg" "${tmp_dir}/zip/op.sig" "${tmp_dir}/zip/op" 2>"${tmp_dir}/gpgv.log"; then
+        log_error "op: signature check against the pinned 1Password key failed — not installing"
+        sed 's/^/    /' "${tmp_dir}/gpgv.log" >&2 2>/dev/null
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
 
     mkdir -p "${HOME}/.local/bin"
-    install -m 755 "${tmp_dir}/op" "${HOME}/.local/bin/op"
+    install -m 755 "${tmp_dir}/zip/op" "${HOME}/.local/bin/op" || { rm -rf "${tmp_dir}"; return 1; }
     rm -rf "${tmp_dir}"
 
     log_info "op installed to ~/.local/bin/op"
     log_warn "Installed without onepassword-cli group — biometric unlock via desktop app will not work."
-    log_warn "For full integration, re-install via package manager: install-op-cli"
+    log_warn "For full integration, re-install via package manager: wb tools install op-cli"
     [[ ":${PATH}:" != *":${HOME}/.local/bin:"* ]] \
         && log_warn "${HOME}/.local/bin is not on PATH — add it in ~/.config/workbench/local/settings.sh"
+    return 0
 }
 
 install-op-cli() {

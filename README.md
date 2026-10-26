@@ -33,8 +33,19 @@ wb add security
     every boot (`systemd-cryptenroll --tpm2-with-pin=yes`). `rotate-luks-key`'s
     post-rotation TPM2 offer stays TPM2-only; re-run
     `enroll-luks-tpm2 --with-pin` afterwards if you want a PIN.
-- `install-cosign`, `install-trivy`, `install-bitwarden`, `install-bw-cli`,
-  `install-1password`, `install-op-cli` — via `wb tools update`.
+- Installers for `cosign`, `trivy`, `bitwarden`, `bw-cli`, `1password` and
+  `op-cli` — run `wb tools install <name>` (or `wb tools upgrade <name>`).
+
+## What each installer verifies
+
+| Installer | Linux | macOS |
+|---|---|---|
+| `cosign` | Release binary checked against the SHA-256 GitHub publishes for it (cosign's checksums file as a fallback). | Homebrew |
+| `trivy` | Aqua's rpm or deb repository, with the repository key pinned (`825AD9036F7C850E6A6FED4935B8ACA44FD9CA9F`); the rpm repository is limited to the `trivy` package. | Homebrew |
+| `bitwarden` | `.deb`/`.rpm`/AppImage checked against the SHA-256 GitHub publishes; Flathub where Flatpak is the route; on Arch with `yay`, the AUR `bitwarden-bin` package. | Homebrew cask |
+| `bw-cli` | npm (`@bitwarden/cli`), or the release zip checked against the SHA-256 GitHub publishes. | Homebrew |
+| `1password` | 1Password's rpm/deb/zypper repository with its key pinned (`3FEF9748469ADBE15DA7CA80AC2D62742012EA22`), plus the pinned debsig keyring on Debian; on Arch, the AUR `1password` package; Flathub on other distros. | Homebrew cask |
+| `op-cli` | The same pinned 1Password repositories; on other distros, the CLI zip, installed only if its `op.sig` verifies (`gpgv`) against the pinned 1Password key. | Homebrew cask |
 
 ## Disk encryption internals
 

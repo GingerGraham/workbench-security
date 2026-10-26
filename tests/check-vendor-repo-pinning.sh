@@ -57,6 +57,16 @@ else
     ok "no remote 1Password gpgkey= in any repo definition"
 fi
 
+# Trivy's rpm repo goes through _wb_dnf_vendor_repo too (behaviour is in
+# tests/check-trivy-repo.sh).
+# shellcheck disable=SC2016  # literal source text, not an expansion
+if grep -q '^        --fingerprint "${_TRIVY_KEY_FPR}" \\$' "${INSTALLERS}" \
+    && ! grep -E 'gpgkey=' "${INSTALLERS}" | grep -q 'aquasecurity'; then
+    ok "the Trivy rpm repo is written through _wb_dnf_vendor_repo with the pinned fingerprint"
+else
+    fail "the Trivy rpm repo is not pinned through _wb_dnf_vendor_repo"
+fi
+
 # ── _1password_repo_rhel arguments ───────────────────────────────────────────
 
 # Core API stubs, as named in the files under test.

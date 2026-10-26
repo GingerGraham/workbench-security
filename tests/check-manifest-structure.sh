@@ -45,6 +45,26 @@ for key in version core_api register; do
     fi
 done
 
+if [[ -n "${MANIFEST}" ]] && grep -qx 'core_api: ">=1.8 <2.0"' "${MANIFEST}"; then
+    ok "manifest declares core_api \">=1.8 <2.0\" (core-generated getters, D89)"
+else
+    fail "manifest core_api is not \">=1.8 <2.0\""
+fi
+
+# Core defines get-security-functions from register.getters[] (D89); a
+# hand-written one would win over it, and the old one used BASH_SOURCE inside
+# the function, which zsh leaves empty.
+if grep -rqE '^[[:space:]]*(function[[:space:]]+)?get-[a-z-]+-functions' "${REPO_ROOT}/shell/"; then
+    fail "shell/ defines a get-*-functions getter (core generates it from the manifest)"
+else
+    ok "shell/ defines no get-*-functions getter"
+fi
+if [[ -n "${MANIFEST}" ]] && grep -qE '^[[:space:]]*function:[[:space:]]*get-security-functions$' "${MANIFEST}"; then
+    ok "manifest still declares get-security-functions in register.getters[]"
+else
+    fail "manifest no longer declares get-security-functions in register.getters[]"
+fi
+
 if [[ -n "${MANIFEST}" ]]; then
     while IFS= read -r src; do
         [[ -z "${src}" ]] && continue

@@ -38,6 +38,8 @@ mkdir -p "${STUBS}"
 # shellcheck disable=SC2016  # ${VERSION_HTML} must expand in the stub, not here
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "${VERSION_HTML}"\n' > "${STUBS}/curl"
 printf '#!/usr/bin/env bash\nexit 0\n' > "${STUBS}/unzip"
+# _op-install-binary checks for gpgv before downloading.
+printf '#!/usr/bin/env bash\nexit 0\n' > "${STUBS}/gpgv"
 chmod +x "${STUBS}"/*
 export PATH="${STUBS}:${PATH}"
 export HOME="${WORK}/home"

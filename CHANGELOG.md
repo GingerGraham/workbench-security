@@ -4,6 +4,32 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **The Trivy repository key is now pinned.** `install-trivy` trusts only the
+  key with fingerprint `825AD9036F7C850E6A6FED4935B8ACA44FD9CA9F`: on
+  rpm hosts the repository file points at a pinned local key
+  (`gpgkey=file://…`) and stays limited to the `trivy` package; on Debian
+  hosts the keyring holds only the pinned key and is rewritten on every run,
+  so a host with the pre-rotation key converges. A served key without the
+  pinned fingerprint stops the install before anything is written
+  (workbench-core D79).
+- **The 1Password CLI zip fallback is now verified.** On distros without a
+  1Password repository, `install-op-cli` installs `op` only when the `op.sig`
+  inside the zip verifies with `gpgv` against the pinned 1Password key, and
+  refuses without `gpgv`.
+
+### Fixed
+
+- **`get-security-functions` now lists this module's names in zsh.** The
+  hand-written getter is gone; workbench-core's generated one (Core API 1.8)
+  reads the registered files instead of `BASH_SOURCE`. Its headers now read
+  `<label> — functions:` / `<label> — aliases:`. The module now needs
+  `core_api: ">=1.8 <2.0"`.
+- **`install-op-cli`'s zip fallback no longer reports failure on success**
+  when `~/.local/bin` is already on `PATH`, and its messages say
+  `wb tools install op-cli`.
+
 ## [0.4.1] - 2026-10-13
 
 ### Security
