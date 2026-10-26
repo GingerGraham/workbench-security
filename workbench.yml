@@ -7,8 +7,8 @@
 #
 # No deploy: entries — the Python PTY-capture worker (workers/) is read
 # directly out of this module's own fetched snapshot by
-# shell/disk-encryption.sh (path resolved via BASH_SOURCE), not deployed
-# anywhere else.
+# shell/disk-encryption.sh (path resolved once, when that file is sourced,
+# from its own location), not deployed anywhere else.
 #
 # See contracts/manifest-spec.md (in workbench-core) for the full field
 # reference.

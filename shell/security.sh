@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 # shell/security.sh — workbench-security
 # Security tool configuration — ClamAV, sonar-scanner, netcat compat.
-# Registered at tier: tools (.dotfiles-sync.yml), sourced unconditionally;
+# Registered at tier: tools (workbench.yml), sourced unconditionally;
 # each block guards on `command -v`. No installer exists for ClamAV in the
 # precursor repo (assumed package-managed).
 # Ported from workbench-precursor's tools/security.sh.
+
+# Availability (workbench-core docs/module-authoring.md). The names below are
+# defined only when their tool exists, but listings read this file
+# statically, so each one declares what it needs.
+_wb_declare_availability clamscan      av clam scan clam-home av-home
+_wb_declare_availability freshclam     clam-update av-update
+_wb_declare_availability sonar-scanner sq
+_wb_declare_availability nc            netcat telnet
 
 # ── ClamAV aliases ────────────────────────────────────────────────────────────
 if command -v clamscan &>/dev/null; then

@@ -18,8 +18,36 @@ All notable changes to `workbench-security` are documented here.
   1Password repository, `install-op-cli` installs `op` only when the `op.sig`
   inside the zip verifies with `gpgv` against the pinned 1Password key, and
   refuses without `gpgv`.
+- **AUR installs are opt-in** (workbench-core D100). On Arch,
+  `install-1password` uses the AUR only with `WORKBENCH_ALLOW_AUR=true` in
+  `~/.config/workbench/local/settings.sh`; without it, it prints the `yay` or
+  `makepkg` command to run and fails. `install-bitwarden` uses the verified
+  AppImage unless the opt-in is set. The `gpg --receive-keys` step, whose
+  failure was ignored, is gone: makepkg's own `validpgpkeys` check is the
+  verification. `install-1password` now also reports a failed distro install
+  instead of "installation complete".
+- **Interrupting `enroll-luks-tpm2`/`rotate-luks-key` removes the recovery
+  key's temporary files.** Ctrl-C or TERM while the PTY transcript or the
+  1Password item file exists removes it, restores your own `INT`/`TERM`
+  traps, and stops the command (N17).
+- **A TPM2+PIN enrollment is no longer replaced silently.** Without
+  `--with-pin`, `enroll-luks-tpm2` asks before replacing an existing TPM2+PIN
+  enrollment with TPM2-only (default no), and refuses with no terminal.
+
+### Added
+
+- **`rotate-luks-key --with-pin`**, with the same meaning as
+  `enroll-luks-tpm2 --with-pin`, for the TPM2 enrollment it offers after a
+  rotation.
+- Listings say what each tool-gated name needs: ClamAV aliases need
+  `clamscan`/`freshclam`, `sq` needs `sonar-scanner`, `netcat`/`telnet` need
+  `nc`, and the disk-encryption commands name their Linux tools.
 
 ### Fixed
+
+- **`enroll-luks-tpm2` and `rotate-luks-key` work in zsh.** The PTY worker
+  was looked up with `BASH_SOURCE` inside a function, which zsh leaves
+  empty, so both stopped at "worker not found".
 
 - **`get-security-functions` now lists this module's names in zsh.** The
   hand-written getter is gone; workbench-core's generated one (Core API 1.8)

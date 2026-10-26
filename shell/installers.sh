@@ -285,9 +285,15 @@ install-bitwarden() {
             ${elevation_cmd} zypper install -y "${temp_dir}/bitwarden.rpm"
             ;;
         pacman)
-            if command -v yay &>/dev/null; then
+            # AUR installs are opt-in (workbench-core D100): bitwarden-bin
+            # is an unreviewed build script. Without the opt-in, use the
+            # verified AppImage.
+            if command -v yay &>/dev/null && [[ "${WORKBENCH_ALLOW_AUR:-false}" == "true" ]]; then
                 yay -S --noconfirm bitwarden-bin
             else
+                if command -v yay &>/dev/null; then
+                    log_info "AUR installs are off (WORKBENCH_ALLOW_AUR) — installing the verified AppImage. For the AUR package instead, run: yay -S bitwarden-bin"
+                fi
                 mkdir -p "${HOME}/Applications"
                 # Verified against the SHA-256 GitHub publishes for the release
                 # asset, not fetched through the bitwarden.com redirect.
@@ -461,19 +467,34 @@ _1password-install-suse() {
     ${elevation_cmd} zypper install -y 1password
 }
 
+# Arch has only the AUR package (community-maintained), and AUR installs are
+# opt-in (workbench-core D100): WORKBENCH_ALLOW_AUR=true in
+# ~/.config/workbench/local/settings.sh. Without it, print the command to run
+# and fail. Verification is makepkg's own: the PKGBUILD's validpgpkeys must
+# match the signature on 1Password's tarball, so the 1Password key
+# (_1PASSWORD_KEY_FPR) has to be in your keyring; a missing or wrong key
+# stops the build.
 _1password-install-arch() {
-    # AUR package maintained by community
+    if [[ "${WORKBENCH_ALLOW_AUR:-false}" != "true" ]]; then
+        log_warn "1password on Arch comes from the AUR, which workbench installs only with WORKBENCH_ALLOW_AUR=true (in ~/.config/workbench/local/settings.sh)."
+        if command -v yay &>/dev/null; then
+            log_warn "To install it yourself, run: yay -S 1password"
+        else
+            log_warn "To install it yourself, run: git clone https://aur.archlinux.org/1password.git && cd 1password && makepkg -si"
+        fi
+        return 1
+    fi
     if command -v yay &>/dev/null; then
-        gpg --receive-keys "${_1PASSWORD_KEY_FPR}" 2>/dev/null || true
         yay -S --noconfirm 1password
     else
-        log_info "yay not found — cloning 1password AUR package manually..."
-        gpg --receive-keys "${_1PASSWORD_KEY_FPR}" 2>/dev/null || true
-        local tmp_dir; tmp_dir="$(mktemp -d)"
+        log_info "yay not found — building the 1password AUR package with makepkg..."
+        local tmp_dir; tmp_dir="$(mktemp -d)" || return 1
         git clone https://aur.archlinux.org/1password.git "${tmp_dir}/1password" \
             || { log_error "Failed to clone AUR package"; rm -rf "${tmp_dir}"; return 1; }
-        ( cd "${tmp_dir}/1password" && makepkg -si --noconfirm )
+        local rc=0
+        ( cd "${tmp_dir}/1password" && makepkg -si --noconfirm ) || rc=$?
         rm -rf "${tmp_dir}"
+        return "${rc}"
     fi
 }
 
@@ -496,10 +517,10 @@ install-1password() {
             ;;
         Linux)
             case "${WORKBENCH_DISTRO}" in
-                rhel)   _1password-install-rhel   ;;
-                debian) _1password-install-debian ;;
-                suse)   _1password-install-suse   ;;
-                arch)   _1password-install-arch   ;;
+                rhel)   _1password-install-rhel   || return 1 ;;
+                debian) _1password-install-debian || return 1 ;;
+                suse)   _1password-install-suse   || return 1 ;;
+                arch)   _1password-install-arch   || return 1 ;;
                 *)
                     # Flatpak fallback for unknown distros
                     if command -v flatpak &>/dev/null; then
