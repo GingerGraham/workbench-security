@@ -18,7 +18,7 @@ All notable changes to `workbench-security` are documented here.
   1Password repository, `install-op-cli` installs `op` only when the `op.sig`
   inside the zip verifies with `gpgv` against the pinned 1Password key, and
   refuses without `gpgv`.
-- **AUR installs are opt-in** (workbench-core D100). On Arch,
+- **BREAKING: AUR installs are opt-in** (workbench-core D100). On Arch,
   `install-1password` uses the AUR only with `WORKBENCH_ALLOW_AUR=true` in
   `~/.config/workbench/local/settings.sh`; without it, it prints the `yay` or
   `makepkg` command to run and fails. `install-bitwarden` uses the verified
