@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-27
+
 ### Security
 
 - **The Trivy repository key is now pinned.** `install-trivy` trusts only the
