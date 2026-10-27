@@ -21,10 +21,10 @@ FPR="3FEF9748469ADBE15DA7CA80AC2D62742012EA22"
 
 # ── Static ───────────────────────────────────────────────────────────────────
 
-# Only the Trivy deb path may still dearmor (Aqua publishes no fingerprint).
+# Every apt keyring is pinned, Trivy's included: nothing dearmors a download.
 n="$(grep -c 'gpg --dearmor' "${INSTALLERS}")"
-if [[ "${n}" -eq 1 ]] && grep 'gpg --dearmor' "${INSTALLERS}" | grep -q 'tee /usr/share/keyrings/trivy.gpg'; then
-    ok "the only remaining gpg --dearmor is the Trivy deb key (no published fingerprint)"
+if [[ "${n}" -eq 0 ]]; then
+    ok "no gpg --dearmor of an unverified download remains in installers.sh"
 else
     fail "unexpected gpg --dearmor in installers.sh (${n} occurrences)"
 fi

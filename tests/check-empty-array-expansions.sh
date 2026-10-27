@@ -74,6 +74,10 @@ _tpm_ensure_recovery_key() { return 0; }
 _tpm_show_slots() { return 0; }
 # shellcheck disable=SC2329
 _tpm_has_token_type() { [[ "${HAS_TPM2:-no}" == "yes" ]]; }
+# The existing TPM2 token has no PIN, so nothing asks (the PIN question is
+# covered in tests/check-disk-encryption-guards.sh).
+# shellcheck disable=SC2329
+_tpm_tpm2_pin_state() { return 1; }
 
 run_case() {   # <has_tpm2 yes|no> <with_pin true|false> <expected argv>
     HAS_TPM2="$1"

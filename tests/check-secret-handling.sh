@@ -99,6 +99,8 @@ log_error() { :; }
 log_warn()  { :; }
 # shellcheck disable=SC2329
 _wb_alias_availability() { :; }
+# shellcheck disable=SC2329
+_wb_declare_availability() { :; }
 export WORKBENCH_OS="Linux"
 export XDG_RUNTIME_DIR="${WORK}/run"
 mkdir -p "${XDG_RUNTIME_DIR}"

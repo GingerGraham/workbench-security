@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shell/disk-encryption.sh — workbench-security
 # LUKS2 + TPM2 enrollment and passphrase rotation. Registered at tier: lazy
-# (.dotfiles-sync.yml) — the last tier the loader sources (see
+# (workbench.yml) — the last tier the loader sources (see
 # workbench-gpg's gpg-management.sh for the same "lazy means last-in-order,
 # not deferred-until-called" note — workbench-core's loader tiers have no
 # true stub mechanism). Self-guards on Linux, since systemd-cryptenroll has
@@ -50,7 +50,12 @@ _tpm_tools_present() {
 #   - _tpm_offer_secret_storage (Bitwarden/1Password): an optional
 #     enhancement inside a function that already works fully without
 #     it, not a gate on the function itself.
-_wb_alias_availability _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
+_wb_alias_availability --needs "cryptsetup, blkid, systemd-cryptenroll, systemctl and python3 (Linux)" \
+    _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
+
+# Resolved once, at source time: inside a function BASH_SOURCE is empty in
+# zsh, while $0 names the sourced file at top level in both shells.
+_de_module_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/.." >/dev/null 2>&1 && pwd)"
 
 [[ "${WORKBENCH_OS}" == "Linux" ]] || return 0
 
@@ -70,6 +75,10 @@ _wb_alias_availability _tpm_tools_present enroll-luks-tpm2 rotate-luks-key
 # boots its unmodified boot chain — protection against a disk removed from
 # the machine, not against the whole machine being stolen. --with-pin also
 # requires a PIN at every boot (systemd-cryptenroll --tpm2-with-pin=yes).
+#
+# A device whose existing TPM2 enrollment needs a PIN is not switched to
+# TPM2-only without asking: without --with-pin, it asks first, and refuses
+# when there is no terminal to ask at.
 enroll-luks-tpm2() {
     local with_pin=false
     case "${1:-}" in
@@ -124,8 +133,19 @@ enroll-luks-tpm2() {
 # enroll it immediately rather than leaving that as a separate manual step.
 #
 # Usage:
-#   rotate-luks-key
+#   rotate-luks-key [--with-pin]
+#
+# --with-pin means the same as enroll-luks-tpm2's: the TPM2 enrollment it
+# offers also requires a PIN at every boot. Without it, that enrollment is
+# TPM2-only.
 rotate-luks-key() {
+    local with_pin=false
+    case "${1:-}" in
+        --with-pin) with_pin=true ;;
+        "") ;;
+        *) log_error "Usage: rotate-luks-key [--with-pin]"; return 2 ;;
+    esac
+
     _tpm_require_tools || return 1
     sudo-test            || return 1
 
@@ -168,7 +188,7 @@ rotate-luks-key() {
                 echo
                 _read_prompt "  A usable TPM2 was found and ${device_path} has no TPM2 auto-unlock yet. Enroll it now? [y/N]: " answer
                 if [[ "$(_str_lower "${answer}")" == "y" ]]; then
-                    _tpm_enroll_device "${device_path}"
+                    _tpm_enroll_device "${device_path}" "${with_pin}"
                 fi
             fi
         else
@@ -233,6 +253,48 @@ _tpm_has_token_type() {
     echo "${listing}" | awk 'NR>1{print $2}' | grep -qx "${token_type}"
 }
 
+# _tpm_tpm2_pin_state <device>
+# Whether an existing systemd-tpm2 token on the device needs a PIN, read from
+# the LUKS2 header's JSON ("tpm2-pin": true): systemd-cryptenroll's own slot
+# listing shows "tpm2" either way. Returns 0 when one does, 1 when none does,
+# 2 when the header could not be read (cryptsetup older than 2.4 has no
+# --dump-json-metadata), so the caller can ask rather than guess.
+_tpm_tpm2_pin_state() {
+    local json
+    json="$(sudo cryptsetup luksDump --dump-json-metadata "$1" 2>/dev/null)" || return 2
+    [[ -n "${json}" ]] || return 2
+    printf '%s' "${json}" | python3 -c '
+import json, sys
+try:
+    tokens = json.load(sys.stdin).get("tokens", {})
+except ValueError:
+    sys.exit(2)
+pin = any(t.get("type") == "systemd-tpm2" and t.get("tpm2-pin") is True
+          for t in tokens.values())
+sys.exit(0 if pin else 1)
+' 2>/dev/null
+}
+
+# _tpm_have_tty
+# True when a person can be asked: /dev/tty opens (works when stdin is a
+# pipe). False under cron, systemd and CI.
+_tpm_have_tty() {
+    { : </dev/tty; } 2>/dev/null
+}
+
+# _tpm_confirm_pin_replacement <device>
+# Asks before a TPM2+PIN enrollment is replaced with TPM2-only. Default no;
+# refuses when there is no terminal.
+_tpm_confirm_pin_replacement() {
+    local device_path="$1" answer=""
+    if ! _tpm_have_tty; then
+        log_error "disk-encryption: ${device_path} has a TPM2+PIN enrollment; replacing it with TPM2-only needs a yes at a terminal. Re-run with --with-pin to keep a PIN."
+        return 1
+    fi
+    _read_prompt "  This replaces your TPM2+PIN unlock with TPM2-only. Continue? [y/N]: " answer
+    [[ "$(_str_lower "${answer}")" == "y" ]]
+}
+
 # _tpm_show_slots <device>
 # Prints the current slot/type table for a device. Informational only —
 # systemd-cryptenroll assigns new enrollments to the lowest free slot
@@ -275,8 +337,23 @@ _tpm_device_label() {
 # Single-device TPM2 enrollment body — shared by enroll-luks-tpm2's device
 # loop and rotate-luks-key's post-rotation offer, so both stay in sync.
 # with_pin=true adds --tpm2-with-pin=yes (security review L8).
+#
+# Without with_pin, an existing TPM2+PIN enrollment is replaced only after a
+# yes (_tpm_confirm_pin_replacement), checked before anything is changed.
 _tpm_enroll_device() {
-    local device_path="$1" with_pin="${2:-false}"
+    local device_path="$1" with_pin="${2:-false}" pin_state
+
+    if [[ "${with_pin}" != "true" ]] && _tpm_has_token_type "${device_path}" "tpm2"; then
+        _tpm_tpm2_pin_state "${device_path}"
+        pin_state=$?
+        if [[ ${pin_state} -eq 2 ]]; then
+            log_warn "disk-encryption: could not read ${device_path}'s LUKS2 header to tell whether its TPM2 enrollment uses a PIN"
+        fi
+        if [[ ${pin_state} -ne 1 ]] && ! _tpm_confirm_pin_replacement "${device_path}"; then
+            log_info "Keeping the existing TPM2 enrollment on ${device_path}"
+            return 1
+        fi
+    fi
 
     _tpm_ensure_recovery_key "${device_path}" || {
         log_warn "skipping ${device_path} — recovery key not confirmed"
@@ -361,15 +438,21 @@ _tpm_ensure_recovery_key() {
     # The worker lives at workers/disk-encryption-pty-capture.py, a sibling
     # of this file's own shell/ directory inside this module's fetched
     # snapshot (contracts/manifest-spec.md D16: register.list entries point
-    # straight at <module>/current/<src>) — resolved via BASH_SOURCE rather
-    # than a deploy: entry, since nothing else needs this file placed
-    # anywhere else on disk.
-    local _de_dir; _de_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local _pty_worker="${_de_dir}/../workers/disk-encryption-pty-capture.py"
+    # straight at <module>/current/<src>) — resolved from this file's own
+    # location rather than a deploy: entry, since nothing else needs this
+    # file placed anywhere else on disk. The module directory is resolved at
+    # source time (_de_module_dir, top of this file), since BASH_SOURCE is
+    # empty inside a function in zsh.
+    local _pty_worker="${_de_module_dir}/workers/disk-encryption-pty-capture.py"
     if [[ ! -f "${_pty_worker}" ]]; then
         log_error "disk-encryption: PTY-capture worker not found at ${_pty_worker}"
         return 1
     fi
+
+    # Ctrl-C or TERM from here until the transcript is removed: remove it,
+    # restore the caller's traps, and re-raise.
+    _TPM_CLEAN_ROOT_FILE="${transcript_file}"
+    _tpm_trap_guard
 
     sudo python3 "${_pty_worker}" "${transcript_file}" \
         systemd-cryptenroll --recovery-key "${device_path}"
@@ -378,6 +461,7 @@ _tpm_ensure_recovery_key() {
     if [[ ${capture_rc} -ne 0 ]]; then
         log_error "disk-encryption: recovery key capture failed for ${device_path} (worker exit ${capture_rc})"
         sudo rm -f "${transcript_file}" 2>/dev/null
+        _tpm_trap_release
         return 1
     fi
 
@@ -387,6 +471,7 @@ _tpm_ensure_recovery_key() {
     local recovery_transcript
     recovery_transcript="$(sudo cat "${transcript_file}" 2>/dev/null | _tpm_clean_transcript)"
     sudo shred -u "${transcript_file}" 2>/dev/null || sudo rm -f "${transcript_file}" 2>/dev/null
+    _tpm_trap_release
 
     # Verify by re-checking device state rather than trusting an exit code
     # (bash $PIPESTATUS and zsh $pipestatus aren't the same mechanism, and
@@ -400,6 +485,61 @@ _tpm_ensure_recovery_key() {
     _tpm_show_slots "${device_path}"
     _tpm_offer_secret_storage "${device_path}" "${recovery_transcript}"
     unset recovery_transcript
+}
+
+# ── Interrupt cleanup (N17) ────────────────────────────────────────────────────
+# The recovery-key transcript and the 1Password item file hold the recovery
+# key. If INT or TERM arrives while one exists, _tpm_on_signal removes it,
+# restores the traps the caller had (this file is sourced into interactive
+# shells, so theirs must survive), and re-raises the signal so the command
+# still stops. Same shape as workbench-gpg's _gpg_tmp_guard/_gpg_tmp_release,
+# kept here rather than cross-called. Set _TPM_CLEAN_ROOT_FILE (a root-owned
+# file, removed with sudo -n) and/or _TPM_CLEAN_DIR (a directory of this
+# user's), then call _tpm_trap_guard; call _tpm_trap_release on every path
+# out once the files are gone.
+_TPM_CLEAN_ROOT_FILE=""
+_TPM_CLEAN_DIR=""
+_TPM_SAVED_TRAPS=""
+
+_tpm_trap_guard() {
+    _TPM_SAVED_TRAPS=""
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        # zsh resets traps in $(…), and its trap builtin has no -p, so list
+        # them in this shell into a file and keep the INT/TERM lines.
+        local _tf
+        if _tf="$(mktemp "${TMPDIR:-/tmp}/wb-tpm-traps.XXXXXX")"; then
+            trap > "${_tf}"
+            _TPM_SAVED_TRAPS="$(grep -E '[[:space:]](SIG)?(INT|TERM)$' "${_tf}")"
+            rm -f "${_tf}"
+        fi
+    else
+        _TPM_SAVED_TRAPS="$(trap -p INT TERM)"
+    fi
+    trap '_tpm_on_signal INT' INT
+    trap '_tpm_on_signal TERM' TERM
+}
+
+_tpm_trap_release() {
+    trap - INT TERM
+    if [[ -n "${_TPM_SAVED_TRAPS}" ]]; then
+        eval "${_TPM_SAVED_TRAPS}"
+    fi
+    _TPM_SAVED_TRAPS=""
+    _TPM_CLEAN_ROOT_FILE=""
+    _TPM_CLEAN_DIR=""
+}
+
+_tpm_on_signal() {
+    local _sig="$1"
+    if [[ -n "${_TPM_CLEAN_ROOT_FILE}" ]]; then
+        sudo -n shred -u "${_TPM_CLEAN_ROOT_FILE}" 2>/dev/null \
+            || sudo -n rm -f "${_TPM_CLEAN_ROOT_FILE}" 2>/dev/null
+    fi
+    if [[ -n "${_TPM_CLEAN_DIR}" ]]; then
+        rm -rf "${_TPM_CLEAN_DIR}"
+    fi
+    _tpm_trap_release
+    kill -s "${_sig}" "$$"
 }
 
 # Strips ANSI escape sequences and carriage returns from a PTY-captured
@@ -493,7 +633,9 @@ _tpm_op_store_recovery() {
     # Item passed via --template (a file in a private runtime directory), not
     # as "notesPlain=<recovery key>" in argv (security review M5).
     tmp_dir="$(_tpm_secret_tmpdir)" || { log_error "disk-encryption: could not create a private temp directory"; return 1; }
-    template="$(op item template get "Secure Note" 2>/dev/null)" || { rm -rf "${tmp_dir}"; log_error "disk-encryption: op item template get failed"; return 1; }
+    _TPM_CLEAN_DIR="${tmp_dir}"
+    _tpm_trap_guard
+    template="$(op item template get "Secure Note" 2>/dev/null)" || { rm -rf "${tmp_dir}"; _tpm_trap_release; log_error "disk-encryption: op item template get failed"; return 1; }
     if ! printf '%s' "${body}" | python3 -c '
 import json, sys
 tpl = json.loads(sys.argv[1])
@@ -505,12 +647,14 @@ with open(sys.argv[3], "w") as out:
     json.dump(tpl, out)
 ' "${template}" "${title}" "${tmp_dir}/item.json"; then
         rm -rf "${tmp_dir}"
+        _tpm_trap_release
         log_error "disk-encryption: failed to build 1Password item '${title}'"
         return 1
     fi
     op item create --template "${tmp_dir}/item.json" >/dev/null 2>&1
     rc=$?
     rm -rf "${tmp_dir}"
+    _tpm_trap_release
     if [[ ${rc} -eq 0 ]]; then
         log_info "disk-encryption: recovery key stored in 1Password as '${title}'"
     else

@@ -30,11 +30,39 @@ wb add security
     (DMA-capable ports, TPM bus sniffing on discrete TPMs, login/lock-screen
     flaws) also remain.
   - **`--with-pin`.** `enroll-luks-tpm2 --with-pin` also requires a PIN at
-    every boot (`systemd-cryptenroll --tpm2-with-pin=yes`). `rotate-luks-key`'s
-    post-rotation TPM2 offer stays TPM2-only; re-run
-    `enroll-luks-tpm2 --with-pin` afterwards if you want a PIN.
-- `install-cosign`, `install-trivy`, `install-bitwarden`, `install-bw-cli`,
-  `install-1password`, `install-op-cli` — via `wb tools update`.
+    every boot (`systemd-cryptenroll --tpm2-with-pin=yes`).
+    `rotate-luks-key --with-pin` does the same for the TPM2 enrollment it
+    offers after a rotation; without it, that enrollment is TPM2-only.
+  - **A PIN is never dropped silently.** Without `--with-pin`, when a
+    device already has a TPM2+PIN enrollment, both commands ask "This
+    replaces your TPM2+PIN unlock with TPM2-only. Continue? [y/N]" before
+    changing anything, and refuse when there is no terminal to ask at.
+  - **Ctrl-C.** Interrupting while the recovery key is held in a temporary
+    file (the PTY transcript, or the 1Password item file) removes that file
+    and stops the command.
+- Installers for `cosign`, `trivy`, `bitwarden`, `bw-cli`, `1password` and
+  `op-cli` — run `wb tools install <name>` (or `wb tools upgrade <name>`).
+
+## What each installer verifies
+
+| Installer | Linux | macOS |
+|---|---|---|
+| `cosign` | Release binary checked against the SHA-256 GitHub publishes for it (cosign's checksums file as a fallback). | Homebrew |
+| `trivy` | Aqua's rpm or deb repository, with the repository key pinned (`825AD9036F7C850E6A6FED4935B8ACA44FD9CA9F`); the rpm repository is limited to the `trivy` package. | Homebrew |
+| `bitwarden` | `.deb`/`.rpm`/AppImage checked against the SHA-256 GitHub publishes; Flathub where Flatpak is the route. On Arch, the AppImage, or the AUR `bitwarden-bin` package with `yay` only when `WORKBENCH_ALLOW_AUR=true`. | Homebrew cask |
+| `bw-cli` | npm (`@bitwarden/cli`), or the release zip checked against the SHA-256 GitHub publishes. | Homebrew |
+| `1password` | 1Password's rpm/deb/zypper repository with its key pinned (`3FEF9748469ADBE15DA7CA80AC2D62742012EA22`), plus the pinned debsig keyring on Debian; Flathub on other distros. On Arch, only with `WORKBENCH_ALLOW_AUR=true`: the AUR `1password` package (`yay`, or `makepkg`), verified by makepkg's own `validpgpkeys` check of 1Password's signature, so the 1Password key must be in your keyring. Without the opt-in it prints the command to run and fails. | Homebrew cask |
+| `op-cli` | The same pinned 1Password repositories; on other distros, the CLI zip, installed only if its `op.sig` verifies (`gpgv`) against the pinned 1Password key. | Homebrew cask |
+
+### AUR packages (Arch)
+
+AUR packages are build scripts nobody at workbench has reviewed, run as you
+and then installed as root, so installers use them only when you opt in
+(workbench-core D100). In `~/.config/workbench/local/settings.sh`:
+
+```sh
+WORKBENCH_ALLOW_AUR=true
+```
 
 ## Disk encryption internals
 
