@@ -11,4 +11,4 @@ jobs:
   commit-format:
     # Pinned to a core release tag (workbench-core D78); core_ref defaults to
     # core's latest release.
-    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@v2.16.2
+    uses: GingerGraham/workbench-core/.github/workflows/module-pr-check.yml@v2.22.0
