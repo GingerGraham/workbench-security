@@ -61,7 +61,7 @@ jobs:
   release:
     needs: [guard, ci]
     if: needs.guard.outputs.proceed == 'true' && needs.ci.result == 'success'
-    uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@v2.16.2
+    uses: GingerGraham/workbench-core/.github/workflows/module-release.yml@v2.22.0
     with:
       bump_type: ${{ github.event.inputs.bump_type || '' }}
       reason: ${{ github.event.inputs.reason || '' }}
