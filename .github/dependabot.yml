@@ -4,3 +4,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # Dependabot treats each reusable workflow path as its own dependency
+      # (module-ci.yml, module-pr-check.yml, module-release.yml,
+      # module-release-finalize.yml), so without a group a core release opens
+      # one PR per workflow file and each merge forces a branch update on the
+      # next. This group bumps every core workflow reference in one PR.
+      workbench-core:
+        patterns:
+          - "GingerGraham/workbench-core/*"
