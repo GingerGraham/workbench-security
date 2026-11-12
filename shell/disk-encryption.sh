@@ -55,7 +55,7 @@ _wb_alias_availability --needs "cryptsetup, blkid, systemd-cryptenroll, systemct
 
 # Resolved once, at source time: inside a function BASH_SOURCE is empty in
 # zsh, while $0 names the sourced file at top level in both shells.
-_de_module_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/.." >/dev/null 2>&1 && pwd)"
+_de_module_dir="$(builtin cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/.." >/dev/null 2>&1 && pwd)"
 
 [[ "${WORKBENCH_OS}" == "Linux" ]] || return 0
 
@@ -604,7 +604,7 @@ _tpm_secret_tmpdir() {
     else
         base="${TMPDIR:-/tmp}"
     fi
-    find "${base}" -maxdepth 1 -type d -name 'wb-tpm.*' -user "$(id -u)" -mmin +60 -exec rm -rf {} + 2>/dev/null
+    command find "${base}" -maxdepth 1 -type d -name 'wb-tpm.*' -user "$(id -u)" -mmin +60 -exec rm -rf {} + 2>/dev/null
     ( umask 077; mktemp -d "${base%/}/wb-tpm.XXXXXX" )
 }
 
