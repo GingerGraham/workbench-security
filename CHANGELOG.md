@@ -4,6 +4,16 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **No more host aliases inside module code (workbench-core D110).**
+  `shell/disk-encryption.sh` found the module directory with a bare `cd`,
+  so a host `cd` function or zoxide left `_de_module_dir` wrong and the
+  TPM2 enrolment could not find its PTY worker script. It and the 1Password
+  Arch fallback now use `builtin cd`, and the stale-temp-dir sweep uses
+  `command find`. Adds `tests/check-no-bare-cd.sh` and
+  `tests/check-cd-wrapper.sh` to keep it that way.
+
 ### Changed
 
 - **Bug report template asks for OS family and environment separately.**

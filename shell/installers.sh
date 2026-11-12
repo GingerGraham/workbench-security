@@ -480,7 +480,7 @@ _1password-install-arch() {
         if command -v yay &>/dev/null; then
             log_warn "To install it yourself, run: yay -S 1password"
         else
-            log_warn "To install it yourself, run: git clone https://aur.archlinux.org/1password.git && cd 1password && makepkg -si"
+            log_warn "To install it yourself, run: git clone https://aur.archlinux.org/1password.git && cd 1password && makepkg -si"  # wb-allow-bare: text shown to the user, not run
         fi
         return 1
     fi
@@ -492,7 +492,7 @@ _1password-install-arch() {
         git clone https://aur.archlinux.org/1password.git "${tmp_dir}/1password" \
             || { log_error "Failed to clone AUR package"; rm -rf "${tmp_dir}"; return 1; }
         local rc=0
-        ( cd "${tmp_dir}/1password" && makepkg -si --noconfirm ) || rc=$?
+        ( builtin cd "${tmp_dir}/1password" && makepkg -si --noconfirm ) || rc=$?
         rm -rf "${tmp_dir}"
         return "${rc}"
     fi
