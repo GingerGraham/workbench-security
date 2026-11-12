@@ -31,7 +31,7 @@ check_no=0
 ok()   { check_no=$((check_no + 1)); echo "OK:   [$check_no] $*"; }
 fail() { check_no=$((check_no + 1)); echo "FAIL: [$check_no] $*"; FAILED=$((FAILED + 1)); }
 
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/wb-cd-wrapper.XXXXXX")"
 trap 'rm -rf "${WORK}"' EXIT
 
 export HOME="${WORK}/home"
@@ -51,7 +51,7 @@ mkdir -p "${HOME}" "${XDG_DATA_HOME}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}"
 cat > "${WORK}/host-wrappers.sh" <<'WRAPPERS_EOF'
 shopt -s expand_aliases
 cd() { printf 'WRAPPER-CALLED\n' >&2; return 1; }
-alias ls='printf "ALIAS-LS-RAN\n"; ls -1 --'
+alias ls='printf "ALIAS-LS-RAN\n"; command ls -1 --'
 alias cd='printf "ALIAS-CD-RAN\n" >&2; false; :'
 alias cat='printf "ALIAS-CAT-RAN\n" >&2; command cat'
 alias cp='printf "ALIAS-CP-RAN\n" >&2; command cp -i'
