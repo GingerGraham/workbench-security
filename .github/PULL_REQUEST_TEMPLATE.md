@@ -22,7 +22,10 @@
       otherwise. See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 - [ ] If this is user-facing, `CHANGELOG.md`'s `## [Unreleased]` has a
       new entry under the right heading — `release.yml` refuses to cut
-      a release with an empty one.
+      a release with an empty one. If a release landed on `main` after
+      you branched, the entry still sits under `[Unreleased]` once `main`
+      is merged in (see the stale-base check in
+      [`workbench-core`'s `docs/release-process.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/release-process.md#the-changelog-discipline)).
 - [ ] `tests/check-*.sh` pass locally, if this module has any, and a
       new/updated suite exists if behaviour changed.
 - [ ] `find shell -name '*.sh' -exec shellcheck {} +` is clean.
