@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for taking the time to report this. If this looks like an
         install/sync issue rather than something specific to this module,
-        workbench-core's [troubleshooting guide](https://github.com/GingerGraham/workbench-core/blob/main/docs/troubleshooting.md)
+        workbench-core's [troubleshooting guide](https://github.com/GingerGraham/workbench-core/blob/main/docs/guide/troubleshooting.md)
         is worth a quick check first.
   - type: input
     id: module-version

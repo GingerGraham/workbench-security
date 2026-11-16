@@ -6,7 +6,7 @@
 # precursor repo (assumed package-managed).
 # Ported from workbench-precursor's tools/security.sh.
 
-# Availability (workbench-core docs/module-authoring.md). The names below are
+# Availability (workbench-core docs/guide/module-authoring.md). The names below are
 # defined only when their tool exists, but listings read this file
 # statically, so each one declares what it needs.
 _wb_declare_availability clamscan      av clam scan clam-home av-home
