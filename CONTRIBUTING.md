@@ -74,7 +74,10 @@ Add an entry to `CHANGELOG.md`'s `## [Unreleased]` section, under the
 [Keep a Changelog](https://keepachangelog.com/) heading it belongs
 under, in the same PR that makes the change. `release.yml` refuses to
 cut a release if a real version bump is pending but `[Unreleased]` is
-still empty.
+still empty. If a release landed on `main` after you branched, check that
+your entry still sits under `[Unreleased]` before you push; a clean merge
+doesn't prove it. See the stale-base check in `workbench-core`'s
+[`docs/release-process.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/release-process.md#the-changelog-discipline).
 
 ### Tests
 

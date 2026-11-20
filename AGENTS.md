@@ -20,11 +20,14 @@ It exists to be installed by `workbench-core`'s `wb add <module>`.
   manifest schema. Log a new decision there (never rewrite an existing
   one) rather than letting an implementation drift from what's
   documented.
-- [`workbench-core`'s `docs/module-authoring.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/module-authoring.md) —
+- [`workbench-core`'s module authoring guide](https://github.com/GingerGraham/workbench-core/blob/main/docs/guide/module-authoring.md) —
   the manifest contract: what `register:`, `deploy:`, and `hooks:` in
   this repo's manifest can and can't do, and what `workbench-core`'s
   reusable `module-ci.yml` "add to core" check (called from this repo's
   own `.github/workflows/ci.yml`) actually verifies.
+- [`workbench-core`'s `docs/module-repo-standards.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/module-repo-standards.md) —
+  the canonical content of this repo's agent-instruction, governance,
+  CI and release files. Change them there first, then propagate here.
 - [`README.md`](README.md) — what this module actually installs/gives
   you.
 - [`.claude/skills/conventional-commits/SKILL.md`](.claude/skills/conventional-commits/SKILL.md) —
@@ -48,6 +51,13 @@ than silently reinterpreting one of these away:
   must also parse as one** — this repo squash-merges PRs; see the
   skill file above before writing either.
 - **A `CHANGELOG.md` `[Unreleased]` entry for anything user-facing** —
-  `release.yml` refuses to cut a release with an empty one.
+  `release.yml` refuses to cut a release with an empty one. A clean merge
+  doesn't prove the entry landed under `[Unreleased]`: if a release landed
+  on `main` after you branched, git can put it inside the already-released
+  section. Before opening a PR, and again before any further push, run the
+  stale-base check in `workbench-core`'s
+  [`docs/release-process.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/release-process.md#the-changelog-discipline)
+  ("The CHANGELOG discipline"). After the PR merges, look at the Release
+  run on `main`; a red one is yours to fix.
 - **No Windows/PowerShell support** — out of scope by design, same as
   `workbench-core`.
