@@ -45,6 +45,12 @@ as the first time you check the title.
 - [ ] `CHANGELOG.md`'s `[Unreleased]` section has an entry for anything
       user-facing — the release workflow refuses to cut a release with
       an empty one.
+- [ ] `git fetch origin main && git log --oneline HEAD..origin/main --
+      CHANGELOG.md` shows no `chore(release)` commit you haven't merged
+      in. If it does, merge `origin/main` and re-read the top of
+      `CHANGELOG.md`: a clean merge can leave your entry inside the
+      version that was just released (stale-base check in
+      `workbench-core`'s `docs/release-process.md`).
 
 Full mechanics live in `workbench-core`'s `docs/release-process.md` and
 `docs/decisions-log.md` (D40, D47, D57).
