@@ -51,6 +51,13 @@ than silently reinterpreting one of these away:
   must also parse as one** — this repo squash-merges PRs; see the
   skill file above before writing either.
 - **A `CHANGELOG.md` `[Unreleased]` entry for anything user-facing** —
-  `release.yml` refuses to cut a release with an empty one.
+  `release.yml` refuses to cut a release with an empty one. A clean merge
+  doesn't prove the entry landed under `[Unreleased]`: if a release landed
+  on `main` after you branched, git can put it inside the already-released
+  section. Before opening a PR, and again before any further push, run the
+  stale-base check in `workbench-core`'s
+  [`docs/release-process.md`](https://github.com/GingerGraham/workbench-core/blob/main/docs/release-process.md#the-changelog-discipline)
+  ("The CHANGELOG discipline"). After the PR merges, look at the Release
+  run on `main`; a red one is yours to fix.
 - **No Windows/PowerShell support** — out of scope by design, same as
   `workbench-core`.

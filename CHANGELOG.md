@@ -4,6 +4,16 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Agent and contributor guidance covers the stale-base CHANGELOG trap
+  (workbench-core D115).** `AGENTS.md`, `.github/copilot-instructions.md`,
+  `CONTRIBUTING.md`, the PR template and the conventional-commits skill
+  checklist now say to check, before opening a PR and before any later
+  push, that a release which landed on `main` since you branched hasn't
+  left your `[Unreleased]` entry inside the released section, and to look
+  at the Release run after merging.
+
 ## [1.0.1] - 2026-11-12
 
 ### Fixed
