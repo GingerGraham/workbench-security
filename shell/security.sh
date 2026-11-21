@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # shell/security.sh — workbench-security
-# Security tool configuration — ClamAV, sonar-scanner, netcat compat.
+# Security tool configuration — ClamAV, sonar-scanner and its keyring token
+# helpers, netcat compat.
 # Registered at tier: tools (workbench.yml), sourced unconditionally;
 # each block guards on `command -v`. No installer exists for ClamAV in the
 # precursor repo (assumed package-managed).
@@ -12,6 +13,7 @@
 _wb_declare_availability clamscan      av clam scan clam-home av-home
 _wb_declare_availability freshclam     clam-update av-update
 _wb_declare_availability sonar-scanner sq
+_wb_declare_availability secret-tool   sonar-token-set sonar-token-get sonar-token-clear
 _wb_declare_availability nc            netcat telnet
 
 # ── ClamAV aliases ────────────────────────────────────────────────────────────
@@ -25,6 +27,68 @@ if command -v clamscan &>/dev/null; then
     alias av-update="sudo freshclam"
 fi
 
+# ── SonarQube token (keyring) ─────────────────────────────────────────────────
+# The token lives in the desktop keyring (libsecret), under these attributes.
+# Same values as _SONAR_TOKEN_SERVICE/_ACCOUNT in shell/installers.sh, which
+# is sourced separately; tests/check-sonar.sh asserts they match.
+_sonar_token_service="sonarqube"
+_sonar_token_account="scanner"
+
+# Prints the stored token, or nothing. No message: `sq` calls this on every run.
+_sonar_token_lookup() {
+    secret-tool lookup service "${_sonar_token_service}" account "${_sonar_token_account}" 2>/dev/null
+}
+
+# Stores a token read from the terminal (hidden) or stdin. It reaches
+# secret-tool on stdin, never in an argument list.
+sonar-token-set() {
+    if ! command -v secret-tool &>/dev/null; then
+        log_error "secret-tool not found — install it with: wb tools install secret-tool"
+        return 1
+    fi
+    local token
+    printf 'SonarQube token (input hidden): ' >&2
+    IFS= read -r -s token || { printf '\n' >&2; return 1; }
+    printf '\n' >&2
+    if [[ -z "${token}" ]]; then
+        log_error "No token entered — nothing stored"
+        return 1
+    fi
+    printf '%s' "${token}" | secret-tool store --label="SonarQube token" \
+        service "${_sonar_token_service}" account "${_sonar_token_account}"
+    local rc=$?
+    token=""
+    return ${rc}
+}
+
+# Prints the stored token. Meant for capturing, e.g.
+# SONAR_TOKEN="$(sonar-token-get)" some-command
+sonar-token-get() {
+    if ! command -v secret-tool &>/dev/null; then
+        log_error "secret-tool not found — install it with: wb tools install secret-tool"
+        return 1
+    fi
+    local token
+    token="$(_sonar_token_lookup)"
+    if [[ -z "${token}" ]]; then
+        log_error "No SonarQube token stored — store one with: sonar-token-set"
+        return 1
+    fi
+    if [[ -t 1 ]]; then
+        printf '%s\n' "${token}"
+    else
+        printf '%s' "${token}"
+    fi
+}
+
+sonar-token-clear() {
+    if ! command -v secret-tool &>/dev/null; then
+        log_error "secret-tool not found — install it with: wb tools install secret-tool"
+        return 1
+    fi
+    secret-tool clear service "${_sonar_token_service}" account "${_sonar_token_account}"
+}
+
 # ── Sonar scanner ─────────────────────────────────────────────────────────────
 # A function, not an alias with the token baked in at definition time — an
 # alias like `alias sq="sonar-scanner -Dsonar.token=$(secret-tool lookup ...)"`
@@ -36,7 +100,7 @@ fi
 if command -v sonar-scanner &>/dev/null; then
     # SonarScanner reads SONAR_TOKEN natively.
     sq() {
-        SONAR_TOKEN="$(secret-tool lookup service sonarqube account scanner 2>/dev/null)" sonar-scanner -X "$@"
+        SONAR_TOKEN="$(_sonar_token_lookup)" sonar-scanner -X "$@"
     }
 fi
 

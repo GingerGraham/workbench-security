@@ -20,7 +20,7 @@ sync:
   enabled: true
 
 info:
-  description: "Security scanners, signing tooling, password manager CLIs/apps, and LUKS2+TPM2 disk encryption management"
+  description: "Security scanners (ClamAV, Sonar), signing tooling, password manager CLIs/apps, and LUKS2+TPM2 disk encryption management"
 
 register:
   shell:

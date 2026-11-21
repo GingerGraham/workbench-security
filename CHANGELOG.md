@@ -4,6 +4,21 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Installers for the SonarQube tools, and keyring helpers for the token.**
+  `wb tools install sonar-scanner` installs the SonarScanner CLI (Linux zip
+  with its bundled JRE, checked against the `.sha256` Sonar publishes;
+  Homebrew on macOS; `SONAR_SCANNER_VERSION=<version>` pins a release).
+  `wb tools install sonar` installs the SonarQube CLI by running
+  SonarSource's own `install.sh` from a file, with `PROFILE=/dev/null` so it
+  doesn't edit your shell rc file, and links it into `~/.local/bin`; that
+  script does not verify the binary it downloads. `wb tools install
+  secret-tool` installs libsecret's `secret-tool`. After a scanner install,
+  the installer offers to store a SonarQube token in the keyring. New
+  `sonar-token-set`, `sonar-token-get` and `sonar-token-clear` manage the
+  token that `sq` already reads. (workbench-devtools#36)
+
 ### Changed
 
 - **Agent and contributor guidance covers the stale-base CHANGELOG trap
