@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-21
+
 ### Added
 
 - **Installers for the SonarQube tools, and keyring helpers for the token.**
