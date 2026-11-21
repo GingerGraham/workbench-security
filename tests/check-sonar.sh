@@ -42,7 +42,7 @@ fi
 # ── Stubs ────────────────────────────────────────────────────────────────────
 
 # Every stub appends "<name> <args>" to CALLS. secret-tool also records its
-# stdin and answers `lookup` from STORED_TOKEN.
+# stdin and answers `lookup` from KEYRING_ENTRY.
 for name in dnf yum apt-get zypper pacman brew; do
     printf '#!/usr/bin/env bash\necho "%s $*" >> "%s"\nexit 0\n' "${name}" "${CALLS}" > "${STUBS}/${name}"
 done
@@ -51,7 +51,7 @@ cat > "${STUBS}/secret-tool" <<STUB
 echo "secret-tool \$*" >> "${CALLS}"
 case "\$1" in
     store)  cat > "${WORK}/secret-stdin" ;;
-    lookup) printf '%s' "\${STORED_TOKEN:-}" ;;
+    lookup) printf '%s' "\${KEYRING_ENTRY:-}" ;;
 esac
 exit 0
 STUB
@@ -166,10 +166,10 @@ else
     fail "sonar-token-set with an empty token: rc=${rc}, calls: $(tr '\n' ';' < "${CALLS}")"
 fi
 
-got="$(STORED_TOKEN="${TOKEN}" sonar-token-get)"
+got="$(KEYRING_ENTRY="${TOKEN}" sonar-token-get)"
 if [[ "${got}" == "${TOKEN}" ]]; then ok "sonar-token-get prints the stored token"; else fail "sonar-token-get printed '${got}'"; fi
 
-out="$(STORED_TOKEN="" sonar-token-get 2>&1)"; rc=$?
+out="$(KEYRING_ENTRY="" sonar-token-get 2>&1)"; rc=$?
 if [[ ${rc} -ne 0 ]] && grep -q 'sonar-token-set' <<<"${out}" && ! grep -q "${TOKEN}" <<<"${out}"; then
     ok "sonar-token-get with nothing stored fails and points at sonar-token-set"
 else
@@ -191,10 +191,10 @@ _sonar_have_terminal() { return 0; }
 # shellcheck disable=SC2329
 _read_prompt() { printf -v "$2" '%s' "${STUB_REPLY:-n}"; }
 # shellcheck disable=SC2329
-_sonar_read_secret() { printf '%s' "${STUB_SECRET:-}"; }
+_sonar_read_secret() { printf '%s' "${STUB_HIDDEN_INPUT:-}"; }
 
 : > "${CALLS}"
-STORED_TOKEN="existing" STUB_REPLY=y STUB_SECRET="${TOKEN}" _sonar_token_offer_store >/dev/null 2>&1
+KEYRING_ENTRY="existing" STUB_REPLY=y STUB_HIDDEN_INPUT="${TOKEN}" _sonar_token_offer_store >/dev/null 2>&1
 if ! grep -q '^secret-tool store' "${CALLS}"; then
     ok "an already-stored token is left alone"
 else
@@ -202,7 +202,7 @@ else
 fi
 
 : > "${CALLS}"; rm -f "${WORK}/secret-stdin"
-STORED_TOKEN="" STUB_REPLY=y STUB_SECRET="${TOKEN}" _sonar_token_offer_store >/dev/null 2>&1
+KEYRING_ENTRY="" STUB_REPLY=y STUB_HIDDEN_INPUT="${TOKEN}" _sonar_token_offer_store >/dev/null 2>&1
 if grep -qx "secret-tool store --label=SonarQube token service sonarqube account scanner" "${CALLS}" \
     && [[ "$(cat "${WORK}/secret-stdin" 2>/dev/null)" == "${TOKEN}" ]] && ! grep -q "${TOKEN}" "${CALLS}"; then
     ok "answering y stores the token on stdin, never on argv"
@@ -211,13 +211,13 @@ else
 fi
 
 : > "${CALLS}"
-STORED_TOKEN="" STUB_REPLY=n STUB_SECRET="${TOKEN}" _sonar_token_offer_store >/dev/null 2>&1
+KEYRING_ENTRY="" STUB_REPLY=n STUB_HIDDEN_INPUT="${TOKEN}" _sonar_token_offer_store >/dev/null 2>&1
 if ! grep -q '^secret-tool store' "${CALLS}"; then ok "answering n stores nothing"; else fail "stored a token after n"; fi
 
 # shellcheck disable=SC2329
 _sonar_have_terminal() { return 1; }
 : > "${CALLS}"
-out="$(STORED_TOKEN="" STUB_REPLY=y _sonar_token_offer_store 2>&1)"
+out="$(KEYRING_ENTRY="" STUB_REPLY=y _sonar_token_offer_store 2>&1)"
 if ! grep -q '^secret-tool store' "${CALLS}" && grep -q 'sonar-token-set' <<<"${out}"; then
     ok "without a terminal nothing is asked and sonar-token-set is suggested"
 else
