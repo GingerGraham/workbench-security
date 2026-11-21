@@ -2,7 +2,9 @@
 # shell/installers.sh — workbench-security
 # install-cosign, install-trivy, install-bitwarden, install-bw-cli,
 # install-1password, install-op-cli and their per-distro helpers. Ported
-# from workbench-precursor's lazy/installers-security.sh.
+# from workbench-precursor's lazy/installers-security.sh. install-secret-tool,
+# install-sonar-scanner and install-sonar (with the SonarQube token prompt)
+# are new in this module.
 #
 # WORKBENCH_OS/WORKBENCH_DISTRO/WORKBENCH_ARCH are workbench-core Core API
 # platform facts (contracts/core-api.md), replacing the precursor's
@@ -727,4 +729,296 @@ install-op-cli() {
 # Mirrors install-op-cli's own final check.
 installed-op-cli() {
     command -v op &>/dev/null
+}
+
+# ── secret-tool install (libsecret) ───────────────────────────────────────────
+# secret-tool talks to the desktop's Secret Service keyring (GNOME Keyring,
+# KeePassXC, ...). It is the command-line side of libsecret and is what the
+# SonarQube token helpers (sonar-token-set/-get/-clear, `sq`) use. macOS keeps
+# secrets in the Keychain and has no secret-tool, so there is nothing to
+# install there.
+install-secret-tool() {
+    log_info "Installing or updating secret-tool (libsecret)..."
+    [[ "${WORKBENCH_OS}" == "Linux" ]] \
+        || { log_error "secret-tool: Linux only (macOS stores secrets in the Keychain)"; return 1; }
+
+    local elevation_cmd
+    elevation_cmd="$(get-elevation-command)" || return 1
+    case "${WORKBENCH_DISTRO}" in
+        rhel)
+            if command -v dnf &>/dev/null; then
+                ${elevation_cmd} dnf install -y libsecret
+            else
+                ${elevation_cmd} yum install -y libsecret
+            fi
+            ;;
+        debian)
+            ${elevation_cmd} apt-get update
+            ${elevation_cmd} apt-get install -y libsecret-tools
+            ;;
+        suse)   ${elevation_cmd} zypper install -y libsecret-tools ;;
+        arch)   ${elevation_cmd} pacman -S --noconfirm libsecret ;;
+        *)      log_error "secret-tool: unknown distro (${WORKBENCH_DISTRO}) — install your distro's libsecret tools package"; return 1 ;;
+    esac || { log_error "secret-tool: package install failed"; return 1; }
+
+    command -v secret-tool &>/dev/null \
+        || { log_error "secret-tool: not on PATH after install"; return 1; }
+    log_info "secret-tool installed"
+}
+
+installed-secret-tool() {
+    command -v secret-tool &>/dev/null
+}
+
+# ── SonarQube token in the keyring ────────────────────────────────────────────
+# The attributes the token is stored under. The same two values are used by
+# `sq` and sonar-token-set/-get/-clear in shell/security.sh — a separate file,
+# because installers are sourced by `wb tools` on their own and never share a
+# shell with the interactive helpers. tests/check-sonar.sh asserts they match.
+_SONAR_TOKEN_SERVICE="sonarqube"
+_SONAR_TOKEN_ACCOUNT="scanner"
+
+# _sonar_read_secret <prompt>
+# Reads one line from the terminal without echoing it and prints it on
+# stdout, so the caller can hold it in a variable. Never on argv.
+_sonar_read_secret() {
+    local value
+    printf '%s' "$1" >/dev/tty || return 1
+    IFS= read -r -s value </dev/tty || { printf '\n' >/dev/tty; return 1; }
+    printf '\n' >/dev/tty
+    printf '%s' "${value}"
+}
+
+# True when there is a terminal to ask on. A function so tests can replace it.
+_sonar_have_terminal() {
+    { : </dev/tty; } 2>/dev/null
+}
+
+# _sonar_token_offer_store
+# After a scanner install: when secret-tool is missing, offers to install it;
+# when no token is stored yet and there is a terminal, offers to store one.
+# Never fails the install — the scanner itself is already in place.
+_sonar_token_offer_store() {
+    if ! command -v secret-tool &>/dev/null; then
+        if [[ "${WORKBENCH_OS}" != "Linux" ]]; then
+            log_info "No secret-tool on ${WORKBENCH_OS} — keep the SonarQube token in the Keychain or pass SONAR_TOKEN yourself"
+            return 0
+        fi
+        log_info "secret-tool is not installed, so the SonarQube token can't be kept in the keyring."
+        install-secret-tool || { log_warn "Skipping token storage — run 'wb tools install secret-tool' to retry"; return 0; }
+    fi
+
+    if [[ -n "$(secret-tool lookup service "${_SONAR_TOKEN_SERVICE}" account "${_SONAR_TOKEN_ACCOUNT}" 2>/dev/null)" ]]; then
+        log_info "A SonarQube token is already stored in the keyring — leaving it unchanged (replace it with sonar-token-set)"
+        return 0
+    fi
+
+    if ! _sonar_have_terminal; then
+        log_info "No terminal to ask on — store a token later with: sonar-token-set"
+        return 0
+    fi
+
+    local reply token
+    _read_prompt "Store a SonarQube token in the keyring now? [y/N]: " reply
+    case "$(_str_lower "${reply}")" in
+        y|yes) ;;
+        *) log_info "Skipped. Store one later with: sonar-token-set"; return 0 ;;
+    esac
+
+    token="$(_sonar_read_secret "SonarQube token (input hidden): ")" || { log_warn "Could not read a token"; return 0; }
+    if [[ -z "${token}" ]]; then
+        log_warn "No token entered — nothing stored"
+        return 0
+    fi
+    # The token goes to secret-tool on stdin (printf is a builtin, so it is
+    # never on any argv).
+    if printf '%s' "${token}" | secret-tool store --label="SonarQube token" \
+            service "${_SONAR_TOKEN_SERVICE}" account "${_SONAR_TOKEN_ACCOUNT}"; then
+        log_info "SonarQube token stored — 'sq' and sonar-token-get read it from the keyring"
+    else
+        log_warn "secret-tool could not store the token (is a Secret Service keyring running and unlocked?)"
+    fi
+    token=""
+}
+
+# ── Shared by the sonar installers ────────────────────────────────────────────
+
+# _sonar_link_into_local_bin <target> <name> <managed-root>
+# Links ~/.local/bin/<name> to <target>. An existing <name> is replaced only
+# when it is already a link into <managed-root> (ours); anything else there
+# is the user's and is left alone.
+_sonar_link_into_local_bin() {
+    local target="$1" name="$2" managed_root="$3"
+    local link="${HOME}/.local/bin/${name}" current
+    mkdir -p "${HOME}/.local/bin" || return 1
+    if [[ -L "${link}" ]]; then
+        current="$(readlink "${link}")"
+        case "${current}" in
+            "${managed_root}"/*) ;;
+            *) log_error "${link} already points to ${current}, not a workbench install — remove it to let workbench manage ${name}"; return 1 ;;
+        esac
+    elif [[ -e "${link}" ]]; then
+        log_error "${link} already exists and isn't a workbench link — remove it to let workbench manage ${name}"
+        return 1
+    fi
+    ln -sfn "${target}" "${link}" || { log_error "Could not link ${link}"; return 1; }
+}
+
+# ── sonar-scanner install ─────────────────────────────────────────────────────
+# SonarScanner CLI: the zip with its own JRE from Sonar's distribution host on
+# Linux (no Java needed), Homebrew on macOS. The latest version comes from
+# Maven Central's metadata for the same release train — Sonar publishes no
+# "latest" pointer and its directory listing is closed. The zip is checked
+# against the .sha256 Sonar publishes beside it (integrity only: both come
+# from the same host; the .asc signature is not checked, no signing key is
+# pinned). Pin a release with SONAR_SCANNER_VERSION=8.4.0.16527.
+
+_SONAR_SCANNER_DIST_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli"
+_SONAR_SCANNER_METADATA_URL="https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/maven-metadata.xml"
+
+_sonar_scanner_latest_version() {
+    curl -fsS "${_SONAR_SCANNER_METADATA_URL}" \
+        | grep '<release>' \
+        | sed -E 's/.*<release>([^<]+)<\/release>.*/\1/' \
+        | head -1
+}
+
+# Prints the asset platform for this machine ("linux-x64"), or fails.
+_sonar_scanner_platform() {
+    case "${WORKBENCH_OS}/${WORKBENCH_ARCH}" in
+        Linux/x86_64|Linux/amd64)   printf '%s' "linux-x64" ;;
+        Linux/aarch64|Linux/arm64)  printf '%s' "linux-aarch64" ;;
+        *) log_error "sonar-scanner: no archive for ${WORKBENCH_OS}/${WORKBENCH_ARCH}"; return 1 ;;
+    esac
+}
+
+_sonar_scanner_install_archive() {
+    command -v curl  &>/dev/null || { log_error "sonar-scanner: curl is required"; return 1; }
+    command -v unzip &>/dev/null || { log_error "sonar-scanner: unzip is required"; return 1; }
+
+    local platform ver
+    platform="$(_sonar_scanner_platform)" || return 1
+    if [[ -n "${SONAR_SCANNER_VERSION:-}" ]]; then
+        ver="${SONAR_SCANNER_VERSION}"
+        printf '%s' "${ver}" | grep -Eq '^[0-9]+(\.[0-9]+){3}$' \
+            || { log_error "sonar-scanner: SONAR_SCANNER_VERSION must look like 8.4.0.16527, not '${ver}'"; return 1; }
+    else
+        ver="$(_sonar_scanner_latest_version)" \
+            || { log_error "sonar-scanner: could not look up the latest version (network?)"; return 1; }
+        printf '%s' "${ver}" | grep -Eq '^[0-9]+(\.[0-9]+){3}$' \
+            || { log_error "sonar-scanner: unexpected latest version '${ver}' — pin one with SONAR_SCANNER_VERSION"; return 1; }
+    fi
+    log_info "sonar-scanner: version ${ver} (${platform})"
+
+    local asset="sonar-scanner-cli-${ver}-${platform}.zip"
+    local url="${_SONAR_SCANNER_DIST_URL}/${asset}"
+    local install_root="${XDG_DATA_HOME:-${HOME}/.local/share}/sonar-scanner"
+    local target="${install_root}/sonar-scanner-${ver}-${platform}"
+
+    if [[ -x "${target}/bin/sonar-scanner" ]]; then
+        log_info "sonar-scanner ${ver} is already installed"
+        _sonar_link_into_local_bin "${target}/bin/sonar-scanner" sonar-scanner "${install_root}"
+        return $?
+    fi
+
+    mkdir -p "${install_root}" || { log_error "sonar-scanner: cannot create ${install_root}"; return 1; }
+    # Inside install_root so the final move is a rename, never a copy.
+    local tmp_dir
+    tmp_dir="$(mktemp -d "${install_root}/.install.XXXXXX")" || { log_error "sonar-scanner: mktemp failed"; return 1; }
+
+    # An asset that doesn't exist comes back as 403 from Sonar's host, not 404.
+    _wb_fetch_verified "${url}" "${tmp_dir}/${asset}" "hashfile:${url}.sha256" \
+        || { log_error "sonar-scanner: download or verification failed for ${asset} (is ${ver} a real release?)"; rm -rf "${tmp_dir}"; return 1; }
+    unzip -q "${tmp_dir}/${asset}" -d "${tmp_dir}/extract" \
+        || { log_error "sonar-scanner: could not unpack ${asset}"; rm -rf "${tmp_dir}"; return 1; }
+
+    # The zip holds exactly one top-level directory. (`command mv`: a host
+    # alias must not run here, workbench-core D110.)
+    set -- "${tmp_dir}/extract"/*/
+    if [[ $# -ne 1 || ! -x "$1/bin/sonar-scanner" ]]; then
+        log_error "sonar-scanner: ${asset} doesn't have the expected layout"
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
+    command mv "${1%/}" "${target}" || { log_error "sonar-scanner: could not move it into ${install_root}"; rm -rf "${tmp_dir}"; return 1; }
+    rm -rf "${tmp_dir}"
+
+    _sonar_link_into_local_bin "${target}/bin/sonar-scanner" sonar-scanner "${install_root}" || return 1
+
+    # Drop superseded versions of this platform.
+    local old
+    for old in "${install_root}"/sonar-scanner-*-"${platform}"; do
+        [[ -d "${old}" && "${old}" != "${target}" ]] && rm -rf "${old}"
+    done
+    log_info "sonar-scanner ${ver} installed to ${target} (linked from ~/.local/bin)"
+}
+
+install-sonar-scanner() {
+    log_info "Installing or updating sonar-scanner..."
+    case "${WORKBENCH_OS}" in
+        Mac)
+            command -v brew &>/dev/null || { log_error "brew is required on macOS"; return 1; }
+            if brew list sonar-scanner &>/dev/null; then brew upgrade sonar-scanner; else brew install sonar-scanner; fi \
+                || return 1
+            ;;
+        Linux) _sonar_scanner_install_archive || return 1 ;;
+        *) log_error "Unsupported OS for sonar-scanner"; return 1 ;;
+    esac
+
+    _sonar_token_offer_store
+
+    echo
+    echo "  Point the scanner at your server with SONAR_HOST_URL (or sonar.host.url in a"
+    echo "  project's sonar-project.properties). 'sq' runs it with the keyring token."
+}
+
+installed-sonar-scanner() {
+    command -v sonar-scanner &>/dev/null
+}
+
+# ── SonarQube CLI (sonar) install ─────────────────────────────────────────────
+# SonarSource's own install.sh, downloaded to a file and run — never piped
+# into a shell. It does not verify the binary it fetches, and it appends a
+# PATH line to the user's rc file; PROFILE=/dev/null (which the script
+# honours) stops that, since workbench owns the rc files, and the binary is
+# linked into ~/.local/bin instead.
+
+_SONAR_CLI_SCRIPT_URL="https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh"
+
+install-sonar() {
+    log_info "Installing or updating the SonarQube CLI (sonar)..."
+    command -v curl &>/dev/null || { log_error "sonar: curl is required"; return 1; }
+    case "${WORKBENCH_OS}/${WORKBENCH_ARCH}" in
+        Linux/x86_64|Linux/amd64|Linux/aarch64|Linux/arm64|Mac/arm64|Mac/aarch64) ;;
+        # Its script assumes macos-arm64 on every Mac, so an Intel Mac would
+        # get a binary it can't run.
+        *) log_error "sonar: no SonarQube CLI build for ${WORKBENCH_OS}/${WORKBENCH_ARCH}"; return 1 ;;
+    esac
+
+    local tmp_script
+    tmp_script="$(mktemp)" || { log_error "sonar: mktemp failed"; return 1; }
+    if ! _download_file_robust "${_SONAR_CLI_SCRIPT_URL}" "${tmp_script}" || [[ ! -s "${tmp_script}" ]]; then
+        log_error "sonar: install script download failed or was empty"
+        rm -f "${tmp_script}"
+        return 1
+    fi
+    if ! PROFILE=/dev/null bash "${tmp_script}"; then
+        log_error "sonar: install script failed"
+        rm -f "${tmp_script}"
+        return 1
+    fi
+    rm -f "${tmp_script}"
+
+    local managed_root="${HOME}/.local/share/sonarqube-cli"
+    [[ -x "${managed_root}/bin/sonar" ]] \
+        || { log_error "sonar: ${managed_root}/bin/sonar not found after install"; return 1; }
+    _sonar_link_into_local_bin "${managed_root}/bin/sonar" sonar "${managed_root}" || return 1
+
+    # SonarSource's script ends by telling you to add a PATH line, which we
+    # asked it not to write.
+    log_info "sonar linked into ~/.local/bin — no PATH change needed. Log in with: sonar auth login"
+}
+
+installed-sonar() {
+    command -v sonar &>/dev/null
 }

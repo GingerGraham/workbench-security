@@ -40,8 +40,14 @@ wb add security
   - **Ctrl-C.** Interrupting while the recovery key is held in a temporary
     file (the PTY transcript, or the 1Password item file) removes that file
     and stops the command.
-- Installers for `cosign`, `trivy`, `bitwarden`, `bw-cli`, `1password` and
-  `op-cli` — run `wb tools install <name>` (or `wb tools upgrade <name>`).
+- **SonarQube token in your keyring** (needs `secret-tool`): `sonar-token-set`
+  asks for a token with the input hidden and stores it, `sonar-token-get`
+  prints it for capturing (`SONAR_TOKEN="$(sonar-token-get)" some-command`),
+  and `sonar-token-clear` removes it. `sq` reads the same entry
+  (`service sonarqube`, `account scanner`).
+- Installers for `cosign`, `trivy`, `bitwarden`, `bw-cli`, `1password`,
+  `op-cli`, `sonar-scanner`, `sonar` (the SonarQube CLI) and `secret-tool` —
+  run `wb tools install <name>` (or `wb tools upgrade <name>`).
 
 ## What each installer verifies
 
@@ -54,6 +60,9 @@ wb add security
 | `1password` | 1Password's rpm/deb/zypper repository with its key pinned (`3FEF9748469ADBE15DA7CA80AC2D62742012EA22`), plus the pinned debsig keyring on Debian; Flathub on other distros. On Arch, only with `WORKBENCH_ALLOW_AUR=true`: the AUR `1password` package (`yay`, or `makepkg`), verified by makepkg's own `validpgpkeys` check of 1Password's signature, so the 1Password key must be in your keyring. Without the opt-in it prints the command to run and fails. | Homebrew cask |
 | `op-cli` | The same pinned 1Password repositories; on other distros, the CLI zip, installed only if its `op.sig` verifies (`gpgv`) against the pinned 1Password key. | Homebrew cask |
 
+`sonar-scanner`, `sonar` and `secret-tool` are covered in
+[SonarQube tools](#sonarqube-tools) below.
+
 ### AUR packages (Arch)
 
 AUR packages are build scripts nobody at workbench has reviewed, run as you
@@ -63,6 +72,31 @@ and then installed as root, so installers use them only when you opt in
 ```sh
 WORKBENCH_ALLOW_AUR=true
 ```
+
+## SonarQube tools
+
+| Installer | What it does |
+|---|---|
+| `sonar-scanner` | Linux: the SonarScanner CLI zip with its own JRE (no Java needed), unpacked to `~/.local/share/sonar-scanner/` and linked from `~/.local/bin`. The latest version is looked up in Maven Central's metadata, and the zip is checked against the `.sha256` Sonar publishes beside it. That is an integrity check only: the checksum and the zip come from the same host, and the `.asc` signature is not checked. macOS: Homebrew. |
+| `sonar` | The SonarQube CLI (currently beta). SonarSource's own `install.sh`, downloaded to a file and run, never piped into a shell. **That script doesn't verify the binary it downloads.** workbench runs it with `PROFILE=/dev/null` so it doesn't edit your shell rc file, and links the binary into `~/.local/bin`. Apple silicon and Linux only. |
+| `secret-tool` | The libsecret command-line tool (`libsecret` or `libsecret-tools`, by distro). Linux only: macOS keeps secrets in the Keychain. |
+
+After `wb tools install sonar-scanner`, the installer installs `secret-tool`
+if it is missing and, when there is a terminal and no token stored yet, asks
+whether to store one. Answering no is fine: run `sonar-token-set` any time.
+An existing token is never replaced by the installer.
+
+Neither the installer nor the helpers set the server address. Give the
+scanner `SONAR_HOST_URL` (for example in `~/.config/workbench/local/settings.sh`)
+or `sonar.host.url` in a project's `sonar-project.properties`.
+
+`~/.local/bin/sonar-scanner` and `~/.local/bin/sonar` are replaced only when
+they are already links workbench made. A file or link of your own is left
+alone and the installer stops with a message.
+
+| Variable | Installer | Effect |
+|---|---|---|
+| `SONAR_SCANNER_VERSION` | `sonar-scanner` | Install that release instead of the latest, e.g. `SONAR_SCANNER_VERSION=8.4.0.16527 wb tools install sonar-scanner`. Sonar's download host answers a version that doesn't exist with HTTP 403, so a 403 usually means a mistyped version. |
 
 ## Disk encryption internals
 
