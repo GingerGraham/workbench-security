@@ -18,13 +18,13 @@ _wb_declare_availability nc            netcat telnet
 
 # ── ClamAV aliases ────────────────────────────────────────────────────────────
 if command -v clamscan &>/dev/null; then
-    alias av="sudo clamscan -r"
-    alias clam="sudo clamscan -r"
-    alias scan="sudo clamscan -r"
-    alias clam-home="echo '[INFO] Scanning /home'; sudo nice -n 15 clamscan --bell -i -r /home"
-    alias av-home="echo '[INFO] Scanning /home'; sudo nice -n 15 clamscan --bell -i -r /home"
-    alias clam-update="sudo freshclam"
-    alias av-update="sudo freshclam"
+    workbench_alias_define av security "sudo clamscan -r"
+    workbench_alias_define clam security "sudo clamscan -r"
+    workbench_alias_define scan security "sudo clamscan -r"
+    workbench_alias_define clam-home security "echo '[INFO] Scanning /home'; sudo nice -n 15 clamscan --bell -i -r /home"
+    workbench_alias_define av-home security "echo '[INFO] Scanning /home'; sudo nice -n 15 clamscan --bell -i -r /home"
+    workbench_alias_define clam-update security "sudo freshclam"
+    workbench_alias_define av-update security "sudo freshclam"
 fi
 
 # ── SonarQube token (keyring) ─────────────────────────────────────────────────
@@ -106,6 +106,6 @@ fi
 
 # ── netcat compatibility ──────────────────────────────────────────────────────
 if command -v nc &>/dev/null; then
-    alias netcat="nc"
-    alias telnet="nc"
+    workbench_alias_define netcat security "nc"
+    workbench_alias_define telnet security "nc"
 fi

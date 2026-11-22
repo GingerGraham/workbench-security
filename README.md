@@ -15,7 +15,7 @@ wb add security
 
 - ClamAV aliases (`av`/`clam`/`scan`/`clam-home`/`clam-update`, ...),
   `sq` (sonar-scanner with a token freshly re-read from `secret-tool` on
-  every call), and netcat compatibility (`netcat`/`telnet` → `nc`).
+  every call), and netcat compatibility (`netcat`/`telnet` → `nc`). An alias is not defined when your shell already has an alias or function of that name; yours is kept, and `wb status` lists what was left alone.
 - **LUKS2 + TPM2 disk encryption** (Linux only): `enroll-luks-tpm2`,
   `rotate-luks-key`. Never wipes a recovery or password slot — only ever
   targets the `tpm2` slot type, and always guarantees a recovery key
