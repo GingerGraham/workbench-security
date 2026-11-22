@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-22
+
 ### Fixed
 
 - **The ClamAV aliases (`av`, `clam`, `scan`, ...) and the `netcat` and `telnet` aliases no longer replace an alias or function you already
