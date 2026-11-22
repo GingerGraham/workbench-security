@@ -1,0 +1,9 @@
+av-home=echo '[INFO] Scanning /home'; sudo nice -n 15 clamscan --bell -i -r /home
+av-update=sudo freshclam
+av=sudo clamscan -r
+clam-home=echo '[INFO] Scanning /home'; sudo nice -n 15 clamscan --bell -i -r /home
+clam-update=sudo freshclam
+clam=sudo clamscan -r
+netcat=nc
+scan=sudo clamscan -r
+telnet=nc

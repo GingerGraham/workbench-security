@@ -45,10 +45,10 @@ for key in version core_api register; do
     fi
 done
 
-if [[ -n "${MANIFEST}" ]] && grep -qx 'core_api: ">=1.8 <2.0"' "${MANIFEST}"; then
-    ok "manifest declares core_api \">=1.8 <2.0\" (core-generated getters, D89)"
+if [[ -n "${MANIFEST}" ]] && grep -qx 'core_api: ">=1.10 <2.0"' "${MANIFEST}"; then
+    ok "manifest declares core_api \">=1.10 <2.0\" (core-generated getters, D89)"
 else
-    fail "manifest core_api is not \">=1.8 <2.0\""
+    fail "manifest core_api is not \">=1.10 <2.0\""
 fi
 
 # Core defines get-security-functions from register.getters[] (D89); a
