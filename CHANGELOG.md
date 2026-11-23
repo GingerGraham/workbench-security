@@ -4,6 +4,17 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **A Keychain-backed `secret-tool` on macOS.** New `shell/macos.sh`, loaded
+  only on macOS, defines `secret-tool store`, `lookup` and `clear` over the
+  login Keychain with libsecret's own syntax, so `sonar-token-set`,
+  `sonar-token-get`, `sq` and scripts written for Linux work unchanged on a
+  Mac. The secret is never in a command's arguments, `store` reads the item
+  back to confirm it, and only the `service` and `account` attributes are
+  accepted. `wb tools install secret-tool` still refuses on macOS, now
+  saying why. See "`secret-tool` on macOS" in the README.
+
 ## [1.1.1] - 2026-11-22
 
 ### Fixed

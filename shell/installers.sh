@@ -735,12 +735,13 @@ installed-op-cli() {
 # secret-tool talks to the desktop's Secret Service keyring (GNOME Keyring,
 # KeePassXC, ...). It is the command-line side of libsecret and is what the
 # SonarQube token helpers (sonar-token-set/-get/-clear, `sq`) use. macOS keeps
-# secrets in the Keychain and has no secret-tool, so there is nothing to
-# install there.
+# secrets in the Keychain and has no libsecret; shell/macos.sh defines a
+# `secret-tool` function there that talks to the Keychain, so there is
+# nothing to install.
 install-secret-tool() {
     log_info "Installing or updating secret-tool (libsecret)..."
     [[ "${WORKBENCH_OS}" == "Linux" ]] \
-        || { log_error "secret-tool: Linux only (macOS stores secrets in the Keychain)"; return 1; }
+        || { log_error "secret-tool: Linux only (on macOS, workbench-security's shell/macos.sh provides a Keychain-backed secret-tool; nothing to install)"; return 1; }
 
     local elevation_cmd
     elevation_cmd="$(get-elevation-command)" || return 1
@@ -801,7 +802,7 @@ _sonar_have_terminal() {
 _sonar_token_offer_store() {
     if ! command -v secret-tool &>/dev/null; then
         if [[ "${WORKBENCH_OS}" != "Linux" ]]; then
-            log_info "No secret-tool on ${WORKBENCH_OS} — keep the SonarQube token in the Keychain or pass SONAR_TOKEN yourself"
+            log_info "No secret-tool in this session. On macOS a new shell has a Keychain-backed one: store the SonarQube token there with sonar-token-set, or pass SONAR_TOKEN yourself"
             return 0
         fi
         log_info "secret-tool is not installed, so the SonarQube token can't be kept in the keyring."

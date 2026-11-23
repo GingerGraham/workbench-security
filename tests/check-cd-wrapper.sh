@@ -47,7 +47,8 @@ mkdir -p "${HOME}" "${XDG_DATA_HOME}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}"
 #
 # rm is not aliased: this module deliberately keeps `rm -f` / `rm -rf`
 # bare, because a force flag overrides an interactive alias. WORKBENCH_OS is
-# set because shell/disk-encryption.sh returns early on anything but Linux.
+# set because shell/disk-encryption.sh returns early on anything but Linux,
+# and shell/macos.sh on anything but Mac (FIXTURE_OS, set per file below).
 cat > "${WORK}/host-wrappers.sh" <<'WRAPPERS_EOF'
 shopt -s expand_aliases
 cd() { printf 'WRAPPER-CALLED\n' >&2; return 1; }
@@ -80,7 +81,7 @@ run_fixture() {
         XDG_DATA_HOME="${XDG_DATA_HOME}" \
         XDG_CONFIG_HOME="${XDG_CONFIG_HOME}" \
         XDG_CACHE_HOME="${XDG_CACHE_HOME}" \
-        WORKBENCH_OS=Linux \
+        WORKBENCH_OS="${FIXTURE_OS:-Linux}" \
         PATH="${STUBS}:${PATH}" \
         bash -c ". '${WORK}/host-wrappers.sh'
 ${body}" 2>&1
@@ -115,7 +116,10 @@ done"
 for file in "${REPO_ROOT}"/shell/*.sh "${REPO_ROOT}"/shell/completions/*.sh; do
     [[ -f "${file}" ]] || continue
     rel="${file#"${REPO_ROOT}"/}"
+    FIXTURE_OS=Linux
+    [[ "${rel}" == "shell/macos.sh" ]] && FIXTURE_OS=Mac
     OUT="$(source_and_dump "${file}")"
+    FIXTURE_OS=Linux
     assert_no_markers "sourcing ${rel}" "${OUT}"
     # A file that defines functions must have defined some here, or the
     # check above looked at nothing.
