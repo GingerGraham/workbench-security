@@ -34,7 +34,7 @@ check_no=0
 ok()   { check_no=$((check_no + 1)); echo "OK:   [$check_no] $*"; }
 fail() { check_no=$((check_no + 1)); echo "FAIL: [$check_no] $*"; FAILED=$((FAILED + 1)); }
 
-SECRET="SENTINEL-keychain-secret-0123"
+SECRET="SENTINEL-keychain-secret-0123" # gitleaks:allow (placeholder the stub round-trips)
 SECRET_HEX="$(printf '%s' "${SECRET}" | od -An -v -tx1 | tr -d ' \n')"
 
 WORK="$(mktemp -d)"
