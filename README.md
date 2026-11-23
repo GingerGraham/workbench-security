@@ -40,11 +40,15 @@ wb add security
   - **Ctrl-C.** Interrupting while the recovery key is held in a temporary
     file (the PTY transcript, or the 1Password item file) removes that file
     and stops the command.
-- **SonarQube token in your keyring** (needs `secret-tool`): `sonar-token-set`
+- **SonarQube token in your keyring** (needs `secret-tool`; on macOS the
+  [Keychain-backed one](#secret-tool-on-macos) is used): `sonar-token-set`
   asks for a token with the input hidden and stores it, `sonar-token-get`
   prints it for capturing (`SONAR_TOKEN="$(sonar-token-get)" some-command`),
   and `sonar-token-clear` removes it. `sq` reads the same entry
   (`service sonarqube`, `account scanner`).
+- **`secret-tool` on macOS**: a `secret-tool` that stores secrets in the login
+  Keychain, with libsecret's syntax, so scripts written for Linux work
+  unchanged. Defined only on macOS.
 - Installers for `cosign`, `trivy`, `bitwarden`, `bw-cli`, `1password`,
   `op-cli`, `sonar-scanner`, `sonar` (the SonarQube CLI) and `secret-tool` —
   run `wb tools install <name>` (or `wb tools upgrade <name>`).
@@ -79,7 +83,7 @@ WORKBENCH_ALLOW_AUR=true
 |---|---|
 | `sonar-scanner` | Linux: the SonarScanner CLI zip with its own JRE (no Java needed), unpacked to `~/.local/share/sonar-scanner/` and linked from `~/.local/bin`. The latest version is looked up in Maven Central's metadata, and the zip is checked against the `.sha256` Sonar publishes beside it. That is an integrity check only: the checksum and the zip come from the same host, and the `.asc` signature is not checked. macOS: Homebrew. |
 | `sonar` | The SonarQube CLI (currently beta). SonarSource's own `install.sh`, downloaded to a file and run, never piped into a shell. **That script doesn't verify the binary it downloads.** workbench runs it with `PROFILE=/dev/null` so it doesn't edit your shell rc file, and links the binary into `~/.local/bin`. Apple silicon and Linux only. |
-| `secret-tool` | The libsecret command-line tool (`libsecret` or `libsecret-tools`, by distro). Linux only: macOS keeps secrets in the Keychain. |
+| `secret-tool` | The libsecret command-line tool (`libsecret` or `libsecret-tools`, by distro). Linux only: on macOS the module defines a Keychain-backed `secret-tool` itself ([below](#secret-tool-on-macos)). |
 
 After `wb tools install sonar-scanner`, the installer installs `secret-tool`
 if it is missing and, when there is a terminal and no token stored yet, asks
@@ -97,6 +101,37 @@ alone and the installer stops with a message.
 | Variable | Installer | Effect |
 |---|---|---|
 | `SONAR_SCANNER_VERSION` | `sonar-scanner` | Install that release instead of the latest, e.g. `SONAR_SCANNER_VERSION=8.4.0.16527 wb tools install sonar-scanner`. Sonar's download host answers a version that doesn't exist with HTTP 403, so a 403 usually means a mistyped version. |
+
+## `secret-tool` on macOS
+
+On macOS, `shell/macos.sh` defines a `secret-tool` shell function that keeps
+secrets in your login Keychain. It takes libsecret's arguments, so
+`sonar-token-set`, `sonar-token-get`, `sq` and any script you wrote for Linux
+use it unchanged. Nothing is installed; it loads with the module in a new
+shell, and only on macOS.
+
+```sh
+printf '%s' "$value" | secret-tool store --label="Example" service example account me
+secret-tool lookup service example account me     # prints the secret, no trailing newline
+secret-tool clear service example account me
+```
+
+`store` reads the secret from standard input, or asks for it with the input
+hidden when standard input is a terminal. `lookup` prints nothing and exits 1
+when there is no such item. Items show up in Keychain Access under the
+`--label` you gave, or the service name.
+
+- **The secret never appears in a command's arguments.** `store` passes it to
+  `security -i` on standard input, so it isn't visible in `ps`.
+- **Only `service` and `account` are accepted, and both are required.** A
+  Keychain item has fixed fields, not libsecret's free-form attributes. Any
+  other attribute is refused with a message.
+- **Values can't contain a double quote, a backslash or a newline.**
+- **`search` and `--collection` are not supported.**
+- **`store` reads the item back** and fails if the Keychain doesn't hold what
+  you gave it.
+- **Keychain prompts.** The first read from a different program, such as a
+  terminal other than the one that stored the item, may ask you to allow it.
 
 ## Disk encryption internals
 

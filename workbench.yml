@@ -5,6 +5,10 @@
 # disk encryption management. Meaningless standalone — depends on
 # workbench-core's loader and Core API.
 #
+# shell/macos.sh is a platform-tier file: core sources it only on macOS,
+# where it supplies a Keychain-backed `secret-tool` (libsecret has no
+# macOS counterpart).
+#
 # No deploy: entries — the Python PTY-capture worker (workers/) is read
 # directly out of this module's own fetched snapshot by
 # shell/disk-encryption.sh (path resolved once, when that file is sourced,
@@ -28,6 +32,8 @@ register:
       tier: tools
     - src: shell/disk-encryption.sh
       tier: lazy
+    - src: shell/macos.sh
+      tier: platform
   installers:
     - src: shell/installers.sh
   getters:
