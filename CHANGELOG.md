@@ -4,6 +4,8 @@ All notable changes to `workbench-security` are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-23
+
 ### Added
 
 - **A Keychain-backed `secret-tool` on macOS.** New `shell/macos.sh`, loaded
